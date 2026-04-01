@@ -1,0 +1,54 @@
+model {
+  # ----------------
+  # Define the priors
+  # ----------------
+  prec_Y ~ dgamma(0.01, 0.01)
+
+  # Intercepts for the log-linear models
+  alpha_delta ~ dnorm(0, 0.25)
+  alpha_prec  ~ dnorm(0, 0.25)
+
+  # Coefficients for the covariates
+  for (v in 1:p) {
+    beta_delta[v] ~ dnorm(0, 1)
+    beta_prec[v]  ~ dnorm(0, 1)
+  }
+
+  # ----------------
+  # Patient initialization
+  # ----------------
+  for (i in 1:N_patients) {
+    mu_init[i] ~ dnorm(7.0, 0.5)  
+
+    # Log-linear regression using inprod
+    log(delta[i])   <- alpha_delta + inprod(X[i, ], beta_delta)
+    log(prec_mu[i]) <- alpha_prec  + inprod(X[i, ], beta_prec)
+  }
+
+  # ---------------------------------------------------------
+  # 1. First Observations ONLY
+  # ---------------------------------------------------------
+  for (i in 1:N_patients) {
+    # first_idx[i] is the exact row number in the global dataset
+    mu[first_idx[i]] ~ dnorm(mu_init[i], prec_mu[i])
+  }
+
+  # ---------------------------------------------------------
+  # 2. Subsequent Observations ONLY (Markov Transitions)
+  # ---------------------------------------------------------
+  for (j in 1:N_subseq) {
+    # Calculate the expected state based on medication
+    expected_mu[subseq_idx[j]] <- mu[subseq_idx[j]-1] - (delta[id[subseq_idx[j]]] * med_flag[subseq_idx[j]])
+    
+    # We can safely use index-1 because subseq_idx[j] is guaranteed to not be a patient's first row
+    mu[subseq_idx[j]] ~ dnorm(expected_mu[subseq_idx[j]], prec_mu[id[subseq_idx[j]]] / dt[subseq_idx[j]])
+  }
+
+  # ---------------------------------------------------------
+  # 3. Observation Likelihood
+  # ---------------------------------------------------------
+  for (k in 1:N_total) {
+    Y[k] ~ dnorm(mu[k], prec_Y)  # this is the conditional Observation
+    is_above_A[k] ~ dinterval(Y[k], A_star)  # this is the conditional likelihood of last indicator
+  }
+}

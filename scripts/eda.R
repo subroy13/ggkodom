@@ -150,3 +150,20 @@ ggplot(a1c_flags %>%
   ylim(-0.035, 0.035)  # this require manual tuning to zoom into the slopes
 
 ggsave("./figures/eda_conditional_beta.pdf", dpi = 300)
+
+
+# ---------------
+# Q: Does missingness of height and weight has association with gender?
+
+dm_features <- read_csv("./data/raw/DM Features.csv")
+dm_control <- read_csv("./data/raw/DM Control_2025.csv")
+
+table(
+    dm_features$`gender at birth`,
+    is.na(dm_features$`height-estimated result`)
+)
+
+table(
+    dm_features$`gender at birth`,
+    is.na(dm_features$`weight-estimated result`)
+)  # establishes missing data at random
