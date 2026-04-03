@@ -48,7 +48,7 @@ merge_dataset <- function(dat_list1, dat_list2) {
 }
 
 # compute metrics from confusion matrix
-compute_metrics <- function(pred_values, true_values, mask = NULL) {
+compute_metrics <- function(pred_values, true_values, mask = NULL, verbose = TRUE) {
   # convert them to boolean factors
   pred_values <- factor(as.logical(pred_values), levels = c(FALSE, TRUE)) # true is the 2nd level
   true_values <- factor(as.logical(true_values), levels = c(FALSE, TRUE))
@@ -69,23 +69,32 @@ compute_metrics <- function(pred_values, true_values, mask = NULL) {
   accuracy <- (tp + tn) / (tp + tn + fp + fn)
   precision <- tp / (tp + fp)
   recall <- tp / (tp + fn)
-  f1 <- 2 * (precision * recall) / (precision + recall)
+  if (is.na(precision) || is.na(recall)) {
+    f1 <- 0
+  } else if (precision == 0 || recall == 0) {
+    f1 <- 0
+  } else {
+    f1 <- 2 * (precision * recall) / (precision + recall)
+  }
 
-  # Print nicely
-  cat("=== Overall Metrics ===\n")
-  cat("Confusion Matrix:\n")
-  print(cm)
   results <- c(
     "Accuracy" = accuracy,
     "Precision" = precision,
     "Recall" = recall,
     "F1" = f1
   )
-  cat("\n")
-  cat(sprintf("Accuracy: %.4f\n", accuracy))
-  cat(sprintf("Precision: %.4f\n", precision))
-  cat(sprintf("Recall: %.4f\n", recall))
-  cat(sprintf("F1 Score: %.4f\n", f1))
+
+  if (verbose) {
+    # Print nicely
+    cat("=== Overall Metrics ===\n")
+    cat("Confusion Matrix:\n")
+    print(cm)
+    cat("\n")
+    cat(sprintf("Accuracy: %.4f\n", accuracy))
+    cat(sprintf("Precision: %.4f\n", precision))
+    cat(sprintf("Recall: %.4f\n", recall))
+    cat(sprintf("F1 Score: %.4f\n", f1))
+  }
 
   invisible(list(
     cm = cm,
@@ -119,4 +128,27 @@ compute_metrics_on_split <- function(
       )
     }
   }
+}
+
+
+# ------------------
+# Helper function to select best threshold
+# ------------------
+best_f1_threshold <- function(pred_probs, target_factor, mask) {
+  # optimizes for f1 score
+  th_list <- seq(0.01, 0.99, 0.005)
+  f1_scores <- numeric(length(th_list))
+  for (i in seq_along(th_list)) {
+    th <- th_list[i]
+    pred_factor <- factor(pred_probs >= th, levels = c(FALSE, TRUE))
+    scores <- compute_metrics(pred_factor, target_factor, mask, verbose = FALSE)
+    f1_scores[i] <- scores$metrics["F1"]
+  }
+
+  # find the best
+  best_th <- th_list[which.max(f1_scores)]
+  return(c(
+    "best_th" = best_th,
+    "best_f1" = max(f1_scores)
+  ))
 }
