@@ -1,24 +1,11 @@
-###############################################################################
-## GLM on Subhrajyoty's train/val split — using our EDA-informed features
-## Goal: beat 65% F1
-## Competition metric: F1-score
-###############################################################################
-
-# load packages and utility functions
+# Subrata da's Feature engineering
 library(tidyverse)
 library(matrixStats)
-source("./scripts/utils.R")
 
-# load the clean dataset
-train_dat <- readRDS("./data/processed/train.Rds")
-val_dat <- readRDS("./data/processed/val.Rds")
-
-
-create_feature_dat <- function(train_dat) {
-    # -------------------------
-    # Feature engineering
-    # ----------------------
-
+# -------------------------
+# Feature engineering
+# ----------------------
+create_features <- function(train_dat) {
     df <- train_dat$measurements %>%
         filter(variable %in% paste0("a1c_", 1:5)) %>%
         pivot_wider(names_from = variable, values_from = c(time, value)) %>%
@@ -103,9 +90,17 @@ create_feature_dat <- function(train_dat) {
             a1c_change_if_high = ifelse(a1c_latest >= 7.0, a1c_latest - value_a1c_1, 0)
         )
 
-    # ---------------
-    # Impute values and create missingness flags
-    # ---------------
+    # create target and mask variables
+    df$target <- factor(ifelse(df$value_a1c_2025 > 0, "Uncontrolled", "Controlled"), levels = c("Controlled", "Uncontrolled"))
+    df$mask <- !is.na(df$time_a1c_2025)
+    return(df)
+}
+
+
+# ---------------
+# Impute values and create missingness flags
+# ---------------
+impute_and_flag <- function(df) {
     flag_cols <- c(
         "abs_change", "a1c_sd", "a1c_range", "a1c_rate",
         "value_hdl", "value_ldl", "value_chol",
@@ -137,112 +132,5 @@ create_feature_dat <- function(train_dat) {
         med_val <- median(df[[col]], na.rm = TRUE)
         df[[col]] <- ifelse(is.na(df[[col]]), med_val, df[[col]])
     }
-
-    # create target and mask variables
-    df$target <- factor(ifelse(df$value_a1c_2025 > 0, "Uncontrolled", "Controlled"), levels = c("Controlled", "Uncontrolled"))
-    df$mask <- !is.na(df$time_a1c_2025)
-
     return(df)
 }
-
-df_train_glm <- create_feature_dat(train_dat)
-df_val_glm <- create_feature_dat(val_dat)
-
-# ----------------
-# Formula
-# ----------------
-f_glm <- target ~
-    a1c_latest + value_a1c_1 + a1c_weighted + abs_change + a1c_sd + a1c_range + a1c_rate +
-    n_a1c + n_drug_classes + total_meds +
-    sulfonylurea + insulin + metformin + sglt2 + glp1 + dpp4 +
-    ed_visits + pcp_visits + admissions +
-    age + gender_male +
-    value_hdl + value_ldl + value_chol +
-    time_weight + time_ldl + time_hdl +
-    high_a1c_insulin + a1c_x_meds +
-    high_a1c_no_meds + a1c_x_ndrug +
-    a1c_change + a1c_per_drug +
-    improving_on_meds + worsening_on_meds + stable_on_meds +
-    on_modern_drugs + n_a1c_x_ndrug +
-    still_high_improving + a1c_change_if_high +
-    abs_change_miss + a1c_sd_miss + a1c_range_miss + a1c_rate_miss +
-    value_hdl_miss + value_ldl_miss + value_chol_miss +
-    time_weight_miss + time_ldl_miss + time_hdl_miss
-
-
-# --------------
-# Fit basic glm
-# F1 score: ~ 56%
-
-m1 <- glm(f_glm, data = df_train_glm, family = binomial)
-p1_train <- predict(m1, df_train_glm, type = "response")
-p1_thresh <- best_f1_threshold(p1_train, df_train_glm$target == "Uncontrolled", df_train_glm$mask)
-p1_thresh
-
-p1_val <- predict(m1, df_val_glm, type = "response")
-compute_metrics(p1_val > p1_thresh["best_th"], df_val_glm$target == "Uncontrolled", df_val_glm$mask)
-
-
-# ----------
-# Fit glm with class weights to handle imbalance
-# F1 score: ~ 56% - 58%
-
-wts <- ifelse(df_train_glm$target == "Uncontrolled", 1 - mean(df_train_glm$target == "Uncontrolled"), mean(df_train_glm$target == "Uncontrolled"))
-
-m2 <- glm(f_glm, data = df_train_glm, family = binomial, weights = wts)
-p2_train <- predict(m2, df_train_glm, type = "response")
-p2_thresh <- best_f1_threshold(p2_train, df_train_glm$target == "Uncontrolled", df_train_glm$mask)
-p2_thresh
-
-p2_val <- predict(m2, df_val_glm, type = "response")
-compute_metrics(p2_val > p2_thresh["best_th"], df_val_glm$target == "Uncontrolled", df_val_glm$mask)
-
-
-# ------------------
-# Fit glmnet elastic net (tuned via 5-fold cv on train)
-# F1 score: ~ 60-61%
-
-library(caret)
-library(glmnet)
-
-# create folds
-set.seed(2441139)
-folds_tr <- createFolds(df_train_glm$target, k = 5, returnTrain = TRUE)
-
-f1_summary <- function(data, lev = NULL, model = NULL) {
-    pos <- lev[2] # positive is the 2nd level
-    obs_pos <- data$obs == pos
-    probs <- data[, pos]
-
-    best_f1_val <- -1
-    for (th in seq(0.01, 0.99, 0.01)) {
-        pred_pos <- probs >= th
-        out <- compute_metrics(pred_pos, obs_pos, verbose = FALSE)
-        best_f1_val <- max(best_f1_val, out$metrics["F1"])
-    }
-    c("best_F1" = best_f1_val)
-}
-
-ctrl_cv <- trainControl(
-    method = "cv", index = folds_tr, classProbs = TRUE,
-    summaryFunction = f1_summary, savePredictions = "final"
-)
-
-glmnet_grid <- expand.grid(
-    alpha = seq(0, 1, by = 0.1),
-    lambda = 10^seq(-4, 0, length = 30)
-)
-
-m3 <- train(f_glm,
-    data = df_train_glm, method = "glmnet", family = "binomial",
-    trControl = ctrl_cv, metric = "best_F1",
-    tuneGrid = glmnet_grid,
-    preProcess = c("center", "scale")
-) # takes ~ 2 mins
-
-p3_train <- predict(m3, df_train_glm, type = "prob")$Uncontrolled
-p3_thresh <- best_f1_threshold(p3_train, df_train_glm$target == "Uncontrolled", df_train_glm$mask)
-p3_thresh
-
-p3_val <- predict(m3, df_val_glm, type = "prob")$Uncontrolled
-compute_metrics(p3_val > p3_thresh["best_th"], df_val_glm$target == "Uncontrolled", df_val_glm$mask)
