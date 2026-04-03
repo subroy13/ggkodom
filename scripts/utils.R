@@ -36,6 +36,18 @@ split_train_test_val <- function(dat_list, id_column = "id", split_percentage = 
     return(l)
 }
 
+merge_dataset <- function(dat_list1, dat_list2) {
+  dat_items_list <- names(dat_list1)
+  l <- lapply(X = dat_items_list, FUN = function(item) {
+    dat1 <- dat_list1[[item]]
+    dat2 <- dat_list2[[item]]
+    bind_rows(dat1, dat2)
+  })
+  names(l) <- dat_items_list
+  return(l)
+}
+
+
 
 
 # TODO: verify if correct
