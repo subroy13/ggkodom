@@ -36,6 +36,26 @@ split_train_test_val <- function(dat_list, id_column = "id", split_percentage = 
   return(l)
 }
 
+sample_dat <- function(dat_list, id_column = "id", sample_size = -1, seed = 1) {
+  set.seed(seed)
+
+  id_vals <- unique(dat_list[[1]][[id_column]])
+  n <- length(id_vals)
+  if (sample_size < 0) {
+    sample_size <- n
+  }
+
+  sample_id_list <- sample(id_vals, size = sample_size)
+
+  out <- lapply(X = dat_list, FUN = function(dat) {
+    id_matches <- dat[[id_column]] %in% sample_id_list
+    dat[id_matches, ]
+  })
+  names(out) <- names(dat_list)
+  out
+}
+
+
 merge_dataset <- function(dat_list1, dat_list2) {
   dat_items_list <- names(dat_list1)
   l <- lapply(X = dat_items_list, FUN = function(item) {
@@ -58,13 +78,13 @@ compute_metrics <- function(pred_values, true_values, mask = NULL, verbose = TRU
     true_values <- true_values[mask]
   }
 
-  cm <- table(pred_values, true_values)
+  cm <- table(pred_values, true_values) # row = pred labels, col = true labels
 
   # compute metrics, predicting TRUE is more important!
-  tp <- cm[2, 2]
-  tn <- cm[1, 1]
-  fp <- cm[2, 1]
-  fn <- cm[1, 2]
+  tp <- cm[2, 2] # pred = TRUE, actual = TRUE
+  tn <- cm[1, 1] # pred = FALSE, actual = FALSE
+  fp <- cm[2, 1] # pred = TRUE, actual = FALSE
+  fn <- cm[1, 2] # pred = FALSE, actual = TRUE
 
   accuracy <- (tp + tn) / (tp + tn + fp + fn)
   precision <- tp / (tp + fp)
@@ -111,7 +131,7 @@ compute_metrics_on_split <- function(
     mask_column = NULL) {
   dat_names <- names(dat_list)
   for (i in seq_along(dat_names)) {
-    message(paste0("Metrices for ", dat_names[i], ":"))
+    message(paste0("Metrics for ", dat_names[i], ":"))
     dat <- dat_list[[dat_names[i]]]
     pred <- prediction_function(dat)
 
@@ -134,7 +154,7 @@ compute_metrics_on_split <- function(
 # ------------------
 # Helper function to select best threshold
 # ------------------
-best_f1_threshold <- function(pred_probs, target_factor, mask) {
+best_f1_threshold <- function(pred_probs, target_factor, mask = NULL) {
   # optimizes for f1 score
   th_list <- seq(0.01, 0.99, 0.005)
   f1_scores <- numeric(length(th_list))
