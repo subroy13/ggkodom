@@ -31,3 +31,17 @@ There are two data files:
 - `DM Control_2025.csv` contains the target response (binary) to be used to train the model.
 
 
+## Mathematical Description of the Dataset
+
+Consider a mathematical model as follows:
+
+* Let $i \in \{1, \dots, N\}$ index the individuals and $j \in \{1, \dots, n_i\}$ index the sequential measurements of `a1c` for the $i$-th individual.
+
+* **Response:** The `a1c` observations are denoted by $Y$ (treat them as response). The observed data is given by: $(t_{ij}, Y_{ij})$, where $t_{ij}$ is the time of measurement for `a1c` and $Y_{ij}$ is the value of the measurement. 
+* **Covariates:** Additionally, we observe $Z_i$, the time-independent covariates (e.g., demographic information) and $(t'_i, X_{t'_i})$ which is some measured covariate at time $t'_i$, may be different from $t_{ij}$s.
+* **Threshold:** $A^*$ is the known clinical intervention threshold.
+
+The dataset contains two distinct types of observations ($j$):
+1.  **Fully Observed:** Standard longitudinal transitions ($j < n_i$).
+2.  **Interval Censored (Train):** For the terminal node of training patients, $Y_{in_i}$ is unobserved, but the binary indicator $\mathbb{I}(Y_{in_i} \ge A^*)$ is known.
+
