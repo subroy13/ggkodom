@@ -32,7 +32,7 @@ get_pred_df_base1 <- function(dat) {
         ungroup() %>%
         mutate(
             a1c_latest = value,
-            a1c_pred = (value > 7.0)
+            a1c_pred = (value > 8.0)
         ) %>%
         left_join(dat$measurements %>% filter(variable == "a1c_2025"), by = "id") %>%
         mutate(
