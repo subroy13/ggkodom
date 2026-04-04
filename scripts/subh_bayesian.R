@@ -68,7 +68,7 @@ compute_bayesian_inputs <- function(train_dat, cov_formula, A_star = 8.0) {
 }
 
 
-covariate_formula <- ~ age + cad + copd + metformin - 1
+covariate_formula <- ~ age + cad + copd + ed_visit + pcp_visit + admission + glp1 + insulin + metformin + sglt2 + sulfonylurea + dpp4 - 1
 
 train_sample_dat <- sample_dat(train_dat, sample_size = 1000)
 jags_data <- compute_bayesian_inputs(train_sample_dat, covariate_formula, A_star = 8.0)
@@ -79,9 +79,9 @@ fit <- run.jags(
     monitor = c("alpha_delta", "alpha_prec", "beta_delta", "beta_prec", "prec_Y"),
     data = jags_data,
     n.chains = 4,
-    adapt = 2000, # Tuning phase
-    burnin = 2000, # Warmup phase
-    sample = 2000, # Post-warmup draws per chain
+    adapt = 1000, # Tuning phase
+    burnin = 500, # Warmup phase
+    sample = 1000, # Post-warmup draws per chain
     method = "parallel" # Distributes chains across CPU cores
 )
 
@@ -102,7 +102,7 @@ predict_jags <- function(mcmc_samples, jags_sim, sim_dat) {
         slice_tail() %>% # picks the last value
         ungroup() %>%
         left_join(
-            test_dat$measurements %>%
+            sim_dat$measurements %>%
                 filter(variable == "a1c_2025") %>%
                 drop_na() %>%
                 select(id, a1c_2025_time = time, a1c_2025 = value),
@@ -151,7 +151,6 @@ predict_jags <- function(mcmc_samples, jags_sim, sim_dat) {
 
     return(exceedence_counts / nrow(mcmc_samples))
 }
-
 
 
 # now sample from posterior and predict for validation data

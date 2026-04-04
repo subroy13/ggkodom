@@ -32,7 +32,7 @@ get_pred_df_base1 <- function(dat) {
         ungroup() %>%
         mutate(
             a1c_latest = value,
-            a1c_pred = (value > 7.0)
+            a1c_pred = (value > 8.0)
         ) %>%
         left_join(dat$measurements %>% filter(variable == "a1c_2025"), by = "id") %>%
         mutate(
@@ -51,3 +51,19 @@ compute_metrics_on_split(
     pred_column = "a1c_pred",
     mask_column = "a1c_2025_valid"
 )
+
+
+# ---------------
+# Baseline 2
+# Algo: simple glm
+# F1 score ~ 60%
+df_train <- get_pred_df_base1(train_dat)
+df_val <- get_pred_df_base1(val_dat)
+
+m1 <- glm(a1c_2025 ~ a1c_latest, data = df_train)
+p1_train <- predict(m1, df_train, type = "response")
+p1_thresh <- best_f1_threshold(p1_train, df_train$a1c_2025 == 1, df_train$a1c_2025_valid)
+p1_thresh
+
+p1_val <- predict(m1, df_val, type = "response")
+compute_metrics(p1_val > p1_thresh["best_th"], df_val$a1c_2025 == 1, df_val$a1c_2025_valid)
