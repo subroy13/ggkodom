@@ -154,3 +154,14 @@ names(splitted_dat)
 lapply(X = names(splitted_dat), FUN = function(x) {
     saveRDS(splitted_dat[[x]], file = paste0("./data/processed/", x, ".Rds"))
 })
+
+# Final test data cleaning
+library(readr)
+dm_features_final_test <- read_csv("/data/raw/TEST SET DM Features.csv")
+dm_control_final_test <- tibble("...1" = dm_features_final_test$...1,
+                                "a1c 2025 Uncontrolled" = NA)
+cleaned_dat_final_test <- clean_dataset(dm_features_final_test,
+                                        dm_control_final_test)
+
+saveRDS(cleaned_dat_final_test, file = "./data/processed/final_test.Rds")
+

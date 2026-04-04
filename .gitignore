@@ -50,7 +50,12 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
+<<<<<<< HEAD
+# DS_Store
+.DS_Store
+=======
 
 # Subrata added:
 CLAUDE.md
 
+>>>>>>> 59dbdba72dc780996608af0623c1fce7e50407be
