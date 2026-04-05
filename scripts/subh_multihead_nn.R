@@ -86,7 +86,12 @@ create_state_transitions <- function(dat) {
 
     # patient level infos
     patient_vars <- dat$basic %>%
-        mutate(across(c(gender, ethnicity, race), ~ coalesce(.x, "Missing"))) %>%
+        mutate(
+            across(c(gender, ethnicity, race), ~ coalesce(.x, "Missing")),
+            gender = factor(gender, levels = c("F", "M", "Missing")),
+            ethnicity = factor(ethnicity, levels = c("HL", "Missing", "NHL")),
+            race = factor(race, levels = c("Asian", "Black", "Missing", "Native", "Other", "White"))
+        ) %>%
         dummy_cols(select_columns = c("gender", "ethnicity", "race")) %>%
         mutate(
             adi_state = if_else(is.na(adi_state), 5, adi_state),
@@ -127,7 +132,7 @@ create_state_transitions <- function(dat) {
             state_start_num = ifelse(state_start == "H", 1, 0),
             state_end_num = ifelse(state_end == "H", 1, 0)
         ) %>%
-        select(-id, -state_start, -state_end) %>% # Drop character columns and identifiers not meant for the network
+        select(-state_start, -state_end) %>% # Drop character columns and identifiers not meant for the network
         mutate(
             # add more features
             bmi = if_else(measure_weight > 0 & measure_height > 0, measure_weight / (((measure_height + 0.01) / 100)^2), 0),
@@ -170,13 +175,18 @@ create_state_transitions <- function(dat) {
 }
 
 train_states <- create_state_transitions(train_dat)
+train_ids <- train_states$id
+train_states <- train_states %>% select(-id)
 val_states <- create_state_transitions(val_dat)
+val_ids <- val_states$id
+val_states <- val_states %>% select(-id)
 
 train_states
 table(train_states$state_start_num, train_states$state_end_num)
 
 # data to tensor
 library(torch)
+set.seed(1234)
 
 x_tensor <- torch_tensor(as.matrix(train_states %>% select(-c(state_start_num, state_end_num))), dtype = torch_float())
 start_state_tensor <- torch_tensor(as.matrix(train_states$state_start_num), dtype = torch_float())
@@ -241,7 +251,8 @@ loss_fn_H2H <- nn_bce_with_logits_loss(
 
 optimizer <- optim_adam(model$parameters, lr = 0.001, weight_decay = 1e-4)
 
-epochs <- 500
+epochs <- 200
+loss_curve <- numeric(epochs)
 for (epoch in 1:epochs) {
     shared_features <- model$shared(x_tensor) # forward pass
     predictions_L2H <- model$head_L_to_H(shared_features)
@@ -258,11 +269,13 @@ for (epoch in 1:epochs) {
     optimizer$zero_grad()
     loss$backward()
     optimizer$step()
+    loss_curve[epoch] <- as.numeric(loss)
 
     if (epoch %% 50 == 0) {
         cat(sprintf("Epoch: %3d | Loss: %.4f\n", epoch, as.numeric(loss)))
     }
 }
+plot(loss_curve, type = "l")
 
 # let's try to do inference
 probs <- torch_sigmoid(model(x_tensor, start_state_tensor))
@@ -291,3 +304,29 @@ compute_metrics(
     as.numeric(val_probs) > val_th,
     val_states$state_end_num == 1
 )
+
+##########################
+# DO NOT RUN THIS PART
+##########################
+
+# peek at test set performance
+test_states <- create_state_transitions(test_dat)
+test_ids <- test_states$id
+test_states <- test_states %>% select(-id)
+test_x <- torch_tensor(as.matrix(test_states %>% select(-state_start_num, -state_end_num)), dtype = torch_float())
+test_start_state <- torch_tensor(as.matrix(test_states$state_start_num), dtype = torch_float())
+test_probs <- torch_sigmoid(model(test_x, test_start_state))
+test_th <- ifelse(test_states$state_start_num == 0, thresh0["best_th"], thresh1["best_th"])
+compute_metrics(
+    as.numeric(test_probs) > test_th,
+    test_states$state_end_num == 1
+)
+
+
+# ---
+# Probabilities
+tibble(
+    id = c(train_ids, val_ids),
+    NN = c(as.numeric(probs), as.numeric(val_probs))
+) %>%
+    write_csv("./data/processed/nn_probs.csv")
