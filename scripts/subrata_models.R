@@ -50,7 +50,11 @@ f_glm <- target ~
     time_gap_miss + max_drop_miss + max_rise_miss +
     slope_above_7_miss + slope_below_7_miss +
     slope_above_8_miss + slope_below_8_miss +
-    post_drop_drift_miss
+    post_drop_drift_miss +
+    bmi + bmi_x_male + bmi_miss
+    # non_hdl + ldl_hdl_ratio + non_hdl_miss + ldl_hdl_ratio_miss +
+    # adi_discrepancy +
+    # log_ed_visits + log_pcp_visits + log_admissions + log_total_meds
 
 
 # --------------
@@ -85,56 +89,7 @@ compute_metrics(p2_val > p2_thresh["best_th"], df_val$target == "Uncontrolled", 
 prob_glm_wt_val <- p2_val; th_glm_wt <- p2_thresh["best_th"]
 
 
-# ------------------
-# Fit glmnet elastic net (tuned via 5-fold cv on train)
-# F1 score: ~ 60-61%
-# Skipped — slow (~2 min), uncomment when needed
-
-# cat("\n------ GLMNET (elastic net, 5-fold CV) ---------\n")
-# library(caret)
-# library(glmnet)
-#
-# # create folds
-# set.seed(2441139)
-# folds_tr <- createFolds(df_train$target, k = 5, returnTrain = TRUE)
-#
-# f1_summary <- function(data, lev = NULL, model = NULL) {
-#     pos <- lev[2] # positive is the 2nd level
-#     obs_pos <- data$obs == pos
-#     probs <- data[, pos]
-#
-#     best_f1_val <- -1
-#     for (th in seq(0.01, 0.99, 0.01)) {
-#         pred_pos <- probs >= th
-#         out <- compute_metrics(pred_pos, obs_pos, verbose = FALSE)
-#         best_f1_val <- max(best_f1_val, out$metrics["F1"])
-#     }
-#     c("best_F1" = best_f1_val)
-# }
-#
-# ctrl_cv <- trainControl(
-#     method = "cv", index = folds_tr, classProbs = TRUE,
-#     summaryFunction = f1_summary, savePredictions = "final"
-# )
-#
-# glmnet_grid <- expand.grid(
-#     alpha = seq(0, 1, by = 0.1),
-#     lambda = 10^seq(-4, 0, length = 30)
-# )
-#
-# m3 <- train(f_glm,
-#     data = df_train, method = "glmnet", family = "binomial",
-#     trControl = ctrl_cv, metric = "best_F1",
-#     tuneGrid = glmnet_grid,
-#     preProcess = c("center", "scale")
-# ) # takes ~ 2 mins
-#
-# p3_train <- predict(m3, df_train, type = "prob")$Uncontrolled
-# p3_thresh <- best_f1_threshold(p3_train, df_train$target == "Uncontrolled", df_train$mask)
-# p3_thresh
-#
-# p3_val <- predict(m3, df_val, type = "prob")$Uncontrolled
-# compute_metrics(p3_val > p3_thresh["best_th"], df_val$target == "Uncontrolled", df_val$mask)
+# glmnet and XGBoost moved after ensemble (slower models run last)
 
 
 
@@ -145,7 +100,6 @@ prob_glm_wt_val <- p2_val; th_glm_wt <- p2_thresh["best_th"]
 library(rpart)
 library(rpart.plot)
 library(mgcv)
-# library(xgboost)  # uncomment when running XGBoost below
 
 
 # load training and validation data, but don't impute??
@@ -181,7 +135,11 @@ feat_cols <- c(
     "high8_insulin", "high8_no_meds", "still_high8_improving", "a1c_change_if_high8",
     "a1c_x_meds", "a1c_x_ndrug",
     "a1c_per_drug", "improving_on_meds", "worsening_on_meds",
-    "stable_on_meds", "on_modern_drugs", "n_a1c_x_ndrug"
+    "stable_on_meds", "on_modern_drugs", "n_a1c_x_ndrug",
+    "bmi", "bmi_x_male"
+    # "non_hdl", "ldl_hdl_ratio",
+    # "adi_discrepancy",
+    # "log_ed_visits", "log_pcp_visits", "log_admissions", "log_total_meds"
 )
 dt_formula <- as.formula(paste("target ~", paste(feat_cols, collapse = " + ")))
 
@@ -216,7 +174,9 @@ m2 <- gam(
         s(a1c_per_drug, k = 6) +
         n_a1c + n_drug_classes + total_meds +
         sulfonylurea + insulin + metformin + sglt2 + glp1 +
-        value_height + value_weight +
+        value_height + value_weight + bmi + bmi_x_male +
+        # non_hdl + ldl_hdl_ratio + adi_discrepancy +
+        # log_ed_visits + log_pcp_visits + log_admissions + log_total_meds +
         ed_visits + age + gender_male +
         adi_state + adi_nation + cad + copd +
         days_to_eval + time_gap +
@@ -237,49 +197,6 @@ p2_thresh
 p2_val <- predict(m2, df_val_imputed, type = "response")
 compute_metrics(p2_val > p2_thresh["best_th"], df_val_imputed$target == "Uncontrolled", df_val_imputed$mask)
 prob_gam_val <- as.numeric(p2_val); th_gam <- p2_thresh["best_th"]
-
-
-# ---------------
-# XGBoost
-# F1 Score: ~ 59%-60%
-# Skipped — slow, marginal gain over other models, uncomment when needed
-
-# cat("\n------ XGBoost ---------\n")
-# ## xgboost handles NAs natively
-# xgb_train <- xgb.DMatrix(
-#     data = as.matrix(df_train[, feat_cols]),
-#     label = df_train$target == "Uncontrolled"
-# )
-# xgb_val <- xgb.DMatrix(
-#     data = as.matrix(df_val[, feat_cols]),
-#     label = df_val$target == "Uncontrolled"
-# )
-# params <- list(
-#     objective = "binary:logistic",
-#     eval_metric = "logloss",
-#     max_depth = 4,
-#     eta = 0.05,
-#     subsample = 0.8,
-#     colsample_bytree = 0.8,
-#     min_child_weight = 10
-# )
-#
-# m3 <- xgb.train(
-#     params = params,
-#     data = xgb_train,
-#     nrounds = 500,
-#     watchlist = list(train = xgb_train, val = xgb_val),
-#     early_stopping_rounds = 30,
-#     print_every_n = 50,
-#     verbose = 1
-# )
-#
-# p3_tr <- predict(m3, xgb_train)
-# p3_thresh <- best_f1_threshold(p3_tr, df_train$target == "Uncontrolled", df_train$mask)
-# p3_thresh
-#
-# p3_val <- predict(m3, xgb_val, type = "response")
-# compute_metrics(p3_val > p3_thresh["best_th"], df_val$target == "Uncontrolled", df_val$mask)
 
 
 #### SAVE VALIDATION PREDICTIONS ####
@@ -322,3 +239,143 @@ prob_ens2_val <- (prob_glm_val + prob_glm_wt_val) / 2
 ens2_thresh <- best_f1_threshold(prob_ens2_val, df_val$target == "Uncontrolled", df_val$mask)
 ens2_thresh
 compute_metrics(prob_ens2_val > ens2_thresh["best_th"], df_val$target == "Uncontrolled", df_val$mask)
+
+
+#### HEAVIER MODELS (slower — results from simple models already printed above) ####
+
+# ------------------
+# glmnet elastic net (tuned via 5-fold CV on train)
+# ~2 mins
+
+cat("\n------ GLMNET (elastic net, 5-fold CV) ---------\n")
+library(caret)
+library(glmnet)
+
+# NOTE: df_train was reassigned to non-imputed version in nonlinear section above.
+# glmnet needs _miss columns, so use df_train_imputed / df_val_imputed.
+set.seed(2441139)
+folds_tr <- createFolds(df_train_imputed$target, k = 5, returnTrain = TRUE)
+
+f1_summary <- function(data, lev = NULL, model = NULL) {
+    pos <- lev[2]
+    obs_pos <- data$obs == pos
+    probs <- data[, pos]
+
+    best_f1_val <- -1
+    for (th in seq(0.01, 0.99, 0.01)) {
+        pred_pos <- probs >= th
+        out <- compute_metrics(pred_pos, obs_pos, verbose = FALSE)
+        best_f1_val <- max(best_f1_val, out$metrics["F1"])
+    }
+    c("best_F1" = best_f1_val)
+}
+
+ctrl_cv <- trainControl(
+    method = "cv", index = folds_tr, classProbs = TRUE,
+    summaryFunction = f1_summary, savePredictions = "final"
+)
+
+glmnet_grid <- expand.grid(
+    alpha = seq(0, 1, by = 0.1),
+    lambda = 10^seq(-4, 0, length = 30)
+)
+
+m_glmnet <- train(f_glm,
+    data = df_train_imputed, method = "glmnet", family = "binomial",
+    trControl = ctrl_cv, metric = "best_F1",
+    tuneGrid = glmnet_grid,
+    preProcess = c("center", "scale")
+)
+
+p_glmnet_train <- predict(m_glmnet, df_train_imputed, type = "prob")$Uncontrolled
+p_glmnet_thresh <- best_f1_threshold(p_glmnet_train, df_train_imputed$target == "Uncontrolled", df_train_imputed$mask)
+p_glmnet_thresh
+
+p_glmnet_val <- predict(m_glmnet, df_val_imputed, type = "prob")$Uncontrolled
+compute_metrics(p_glmnet_val > p_glmnet_thresh["best_th"], df_val_imputed$target == "Uncontrolled", df_val_imputed$mask)
+
+
+# ---------------
+# XGBoost
+# xgboost handles NAs natively — uses non-imputed df_train/df_val
+
+cat("\n------ XGBoost ---------\n")
+library(xgboost)
+
+xgb_train <- xgb.DMatrix(
+    data = as.matrix(df_train[, feat_cols]),
+    label = df_train$target == "Uncontrolled"
+)
+xgb_val <- xgb.DMatrix(
+    data = as.matrix(df_val[, feat_cols]),
+    label = df_val$target == "Uncontrolled"
+)
+params <- list(
+    objective = "binary:logistic",
+    eval_metric = "logloss",
+    max_depth = 4,
+    eta = 0.05,
+    subsample = 0.8,
+    colsample_bytree = 0.8,
+    min_child_weight = 10
+)
+
+m_xgb <- xgb.train(
+    params = params,
+    data = xgb_train,
+    nrounds = 500,
+    watchlist = list(train = xgb_train, val = xgb_val),
+    early_stopping_rounds = 30,
+    print_every_n = 50,
+    verbose = 1
+)
+
+p_xgb_tr <- predict(m_xgb, xgb_train)
+p_xgb_thresh <- best_f1_threshold(p_xgb_tr, df_train$target == "Uncontrolled", df_train$mask)
+p_xgb_thresh
+
+p_xgb_val <- predict(m_xgb, xgb_val)
+compute_metrics(p_xgb_val > p_xgb_thresh["best_th"], df_val$target == "Uncontrolled", df_val$mask)
+
+#### XGBoost feature importance ####
+cat("\n------ XGBoost Feature Importance (top 20) ---------\n")
+imp <- xgb.importance(feature_names = feat_cols, model = m_xgb)
+print(imp[1:min(20, nrow(imp)), ], row.names = FALSE)
+
+
+# ---------------
+# XGBoost (tighter regularization)
+# Lower max_depth, higher min_child_weight to reduce train-val gap
+
+cat("\n------ XGBoost (regularized) ---------\n")
+params_reg <- list(
+    objective = "binary:logistic",
+    eval_metric = "logloss",
+    max_depth = 3,
+    eta = 0.05,
+    subsample = 0.7,
+    colsample_bytree = 0.6,
+    min_child_weight = 20,
+    gamma = 1
+)
+
+m_xgb_reg <- xgb.train(
+    params = params_reg,
+    data = xgb_train,
+    nrounds = 500,
+    watchlist = list(train = xgb_train, val = xgb_val),
+    early_stopping_rounds = 30,
+    print_every_n = 50,
+    verbose = 1
+)
+
+p_xgb_reg_tr <- predict(m_xgb_reg, xgb_train)
+p_xgb_reg_thresh <- best_f1_threshold(p_xgb_reg_tr, df_train$target == "Uncontrolled", df_train$mask)
+p_xgb_reg_thresh
+
+p_xgb_reg_val <- predict(m_xgb_reg, xgb_val)
+compute_metrics(p_xgb_reg_val > p_xgb_reg_thresh["best_th"], df_val$target == "Uncontrolled", df_val$mask)
+
+cat("\n------ XGBoost (regularized) Feature Importance (top 20) ---------\n")
+imp_reg <- xgb.importance(feature_names = feat_cols, model = m_xgb_reg)
+print(imp_reg[1:min(20, nrow(imp_reg)), ], row.names = FALSE)

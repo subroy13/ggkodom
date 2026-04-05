@@ -195,3 +195,57 @@ Current: 55 inputs → 32 → 32 → two heads (2,914 parameters). With ~36k tra
 1. Fix 1 (loss weighting) — simplest, directly addresses the mismatch
 2. Fix 3 (trajectory features) — if Fix 1 closes the gap with GLM+wt, this could push past it
 3. Fix 2 (two-stage) — principled version if more investment warranted
+
+### Results (Apr 5)
+
+Subhrajyoty found ID mismatch in patient-level evaluation — `val_returned_ids` (from raw data) didn't align with `val_states` rows (from transition pipeline). Fixed by adding `is_target` flag inside `create_state_transitions()`. Old 60.4% was slightly inflated.
+
+| Step | Config | Patient F1 | Notes |
+|---|---|---|---|
+| Step 0 | Baseline (corrected eval, 200ep) | 59.7% | True baseline after ID fix |
+| Step 1 | Fix 1 (loss weighting 10x, 200ep) | **60.1%** | +0.4%, modest improvement |
+| Step 1b | Fix 1 (400ep) | 58.5% | Overfitting — train loss down, val F1 down |
+| Step 2 | Fix 1 + Fix 2 (200+100ep fine-tune) | 58.8% | Stage 2 hurt — model already at local min |
+
+**Fix 1 helps slightly (+0.4%). Fix 2 hurts. More epochs hurts. Best NN so far: 60.1%.**
+Still below GLM+wt (61.7%). Fix 3 (trajectory features) still untested.
+
+### BMI note
+
+BMI is computed in the NN model (derived from height/weight in `create_state_transitions`). NOT in the GLM pipeline (`subrata_features.R`) — uses raw height/weight instead. EDA showed 72-83% missing for height/weight, so BMI has limited impact either way.
+
+---
+
+## Apr 5, 2026 — Time-based splitting idea (Subrata)
+
+Expands on hand-written idea (ii) above. Currently we split by subject — train/val/test are disjoint patient groups. The NN transition model already uses all a1c_i → a1c_{i+1} pairs as training rows, but the SPLIT is still by patient.
+
+**Alternative: time-based (within-patient) split.** For a patient with 5 visits, use transitions 1→2, 2→3, 3→4 for training, and predict transition 4→5 (or 5→2025). The same patient appears in both train and eval, but at different time points. This is the natural framing for time-series forecasting.
+
+**What this changes:**
+- Training data: ALL patients' earlier transitions (not just 50% of patients). Massive increase in training data for learning dynamics.
+- Eval data: each patient's LAST transition only.
+- Single-visit patients: no intermediate transitions to learn from. Must use patient-level features (demographics, meds, counts) + the single A1c value directly. Could fall back to GLM-style prediction for these.
+
+**Why it might help:**
+- The current NN learns dynamics from train-split patients and applies to val-split patients. But patient-specific patterns (individual treatment response, volatility) don't transfer across patients — they're idiosyncratic. Time-based splitting lets the model see each patient's OWN earlier dynamics and use that to predict their future.
+- This is exactly what the Bayesian model does (patient-specific random effects). The NN could learn something similar if it sees the patient's history.
+
+**Why it might not help / complications:**
+- Risk of overfitting to patient-specific patterns. The model might just memorize "patient X tends to be high" without learning generalizable dynamics.
+- The competition still scores on held-out patients (test set). We'd still need a subject-based held-out set for final evaluation. The time-based split is for TRAINING, not for final eval.
+- Implementation: need to restructure the data pipeline. Each patient's transitions get split differently. More complex than the current approach.
+- For the NN transition model specifically: it already uses all transitions. The key change would be EVALUATING on the last transition of ALL patients (not just val-split patients) during training, which is closer to what we want.
+
+**Possible implementation:**
+1. Keep the existing subject-based val/test splits for final evaluation.
+2. For training: use ALL patients (train+val+test) intermediate transitions as training data.
+3. For training-eval: use train patients' final transitions to tune thresholds.
+4. For competition-eval: use val patients' final transitions (never seen during training for these patients).
+5. Single-visit patients: separate model (GLM or just threshold on a1c value).
+
+### Result (tested Apr 5): FAILED
+
+Implemented as `scripts/subrata_nn_timesplit.R`. Val patient F1 = **58.0%** (vs 61.0% subject-split). The 28k additional intermediate transitions diluted the signal. Intermediate transitions (between regular visits, short gaps) are genuinely different from target transitions (last reading → 2025 eval, potentially years apart). The model learned "what happens between visits" even harder, but that doesn't help predict "what happens by 2025 after treatment."
+
+This also confirms Fix 2's failure — intermediate and target transitions are fundamentally different tasks. The competition question isn't about short-term dynamics, it's about long-term treatment outcomes. The GLM's patient-level summary features (EWMA, volatility, regime fractions) capture trajectory information more effectively than modeling individual transitions.

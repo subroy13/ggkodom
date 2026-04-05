@@ -211,7 +211,24 @@ create_features <- function(train_dat) {
             worsening_on_meds = as.integer(a1c_latest > value_a1c_1 & total_meds > 0),
             stable_on_meds = as.integer(a1c_latest == value_a1c_1 & total_meds > 0),
             on_modern_drugs = as.integer(glp1 > 0 | sglt2 > 0),
-            n_a1c_x_ndrug = n_a1c * n_drug_classes
+            n_a1c_x_ndrug = n_a1c * n_drug_classes,
+
+            # BMI (derived from height + weight, filter extreme values)
+            bmi = {
+                raw <- value_weight / ((value_height / 100)^2)
+                if_else(!is.na(raw) & raw >= 10 & raw <= 80, raw, NA_real_)
+            },
+            bmi_x_male = if_else(!is.na(bmi), bmi * gender_male, NA_real_)
+
+            # Derived lipid/log features (tested Apr 5 — hurt GLM/XGBoost, only helped glmnet)
+            # Kept commented; uncomment for glmnet-specific runs
+            # non_hdl = value_chol - value_hdl,
+            # ldl_hdl_ratio = if_else(!is.na(value_ldl) & !is.na(value_hdl) & value_hdl > 0, value_ldl / value_hdl, NA_real_),
+            # adi_discrepancy = adi_nation - adi_state,
+            # log_ed_visits = log(1 + ed_visits),
+            # log_pcp_visits = log(1 + pcp_visits),
+            # log_admissions = log(1 + admissions),
+            # log_total_meds = log(1 + total_meds)
         )
 
     # create target and mask variables
@@ -234,7 +251,9 @@ impute_and_flag <- function(df) {
         "time_gap", "max_drop", "max_rise",
         "slope_above_7", "slope_below_7",
         "slope_above_8", "slope_below_8",
-        "post_drop_drift"
+        "post_drop_drift",
+        "bmi"
+        # "non_hdl", "ldl_hdl_ratio"
     )
     for (col in flag_cols) {
         df[[paste0(col, "_miss")]] <- as.integer(is.na(df[[col]]))
@@ -268,7 +287,11 @@ impute_and_flag <- function(df) {
         "a1c_x_meds", "a1c_x_ndrug",
         "a1c_change", "a1c_per_drug",
         "improving_on_meds", "worsening_on_meds", "stable_on_meds",
-        "on_modern_drugs", "n_a1c_x_ndrug"
+        "on_modern_drugs", "n_a1c_x_ndrug",
+        "bmi", "bmi_x_male"
+        # "non_hdl", "ldl_hdl_ratio",
+        # "adi_discrepancy",
+        # "log_ed_visits", "log_pcp_visits", "log_admissions", "log_total_meds"
     )
     setdiff(feature_cols, colnames(df))
     for (col in feature_cols) {

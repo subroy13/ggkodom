@@ -125,27 +125,26 @@ create_state_transitions <- function(dat) {
         pivot_wider(names_from = variable, values_from = value) %>%
         mutate(
             a1c_latest = exec(coalesce, !!!syms(paste0("a1c_", 5:1))), # latest a1c value
-            n_a1c = rowSums(!is.na(across(a1c_1:a1c_5))) # number of readings
-            ## Fix 3 (uncomment after testing Fix 1 alone):
-            # a1c_ewma = {
-            #     vals <- as.matrix(pick(a1c_1:a1c_5))
-            #     w <- matrix(0.5^(4:0), nrow = nrow(vals), ncol = 5, byrow = TRUE)
-            #     present <- !is.na(vals)
-            #     vals[is.na(vals)] <- 0
-            #     rowSums(vals * w * present) / rowSums(w * present)
-            # },
-            # a1c_sd = {
-            #     vals <- as.matrix(pick(a1c_1:a1c_5))
-            #     s <- apply(vals, 1, sd, na.rm = TRUE)
-            #     replace(s, is.na(s), 0)
-            # },
-            # frac_above_8 = {
-            #     vals <- as.matrix(pick(a1c_1:a1c_5))
-            #     rowSums(vals >= 8, na.rm = TRUE) / n_a1c
-            # }
+            n_a1c = rowSums(!is.na(across(a1c_1:a1c_5))), # number of readings
+            # Fix 3: trajectory summary features (these drive the GLM — give NN access too)
+            a1c_ewma = {
+                vals <- as.matrix(pick(a1c_1:a1c_5))
+                w <- matrix(0.5^(4:0), nrow = nrow(vals), ncol = 5, byrow = TRUE)
+                present <- !is.na(vals)
+                vals[is.na(vals)] <- 0
+                rowSums(vals * w * present) / rowSums(w * present)
+            },
+            a1c_sd = {
+                vals <- as.matrix(pick(a1c_1:a1c_5))
+                s <- apply(vals, 1, sd, na.rm = TRUE)
+                replace(s, is.na(s), 0)
+            },
+            frac_above_8 = {
+                vals <- as.matrix(pick(a1c_1:a1c_5))
+                rowSums(vals >= 8, na.rm = TRUE) / n_a1c
+            }
         ) %>%
-        select(id, a1c_1, a1c_latest, n_a1c)
-        # Fix 3: add a1c_ewma, a1c_sd, frac_above_8 to select() when uncommenting above
+        select(id, a1c_1, a1c_latest, n_a1c, a1c_ewma, a1c_sd, frac_above_8)
     patient_vars <- patient_vars %>% left_join(patient_a1c_measures, by = "id")
 
     transitions <- transitions %>%
@@ -182,8 +181,7 @@ create_state_transitions <- function(dat) {
 
     continuous_features <- c(
         "delta_t", "log_delta_t", "a1c_latest",
-        # Fix 3: uncomment when adding trajectory features
-        # "a1c_ewma", "a1c_sd", "frac_above_8",
+        "a1c_ewma", "a1c_sd", "frac_above_8",
         "measure_height", "measure_weight", "bmi",
         "measure_ldl", "measure_hdl", "measure_chol", "non_hdl", "ldl_hdl_ratio",
         "age", "adi_state", "adi_nation", "adi_discrepancy",
@@ -290,8 +288,8 @@ loss_fn_H2H <- nn_bce_with_logits_loss(
 )
 
 ## Fix 1 (uncomment to test loss weighting — run baseline first):
-# final_upweight <- 10.0
-# transition_w <- torch_tensor(ifelse(train_is_final == 1, final_upweight, 1.0), dtype = torch_float())$unsqueeze(2)
+final_upweight <- 10.0
+transition_w <- torch_tensor(ifelse(train_is_final == 1, final_upweight, 1.0), dtype = torch_float())$unsqueeze(2)
 
 optimizer <- optim_adam(model$parameters, lr = 0.001, weight_decay = 1e-4)
 
@@ -308,8 +306,8 @@ for (epoch in 1:epochs) {
     # Original: equal weight on all transitions
     loss <- (raw_loss_L * (1 - start_state_tensor) + raw_loss_H * start_state_tensor)$mean()
     ## Fix 1: uncomment below (and comment line above) to upweight final transitions
-    # per_row_loss <- raw_loss_L * (1 - start_state_tensor) + raw_loss_H * start_state_tensor
-    # loss <- (per_row_loss * transition_w)$sum() / transition_w$sum()
+    per_row_loss <- raw_loss_L * (1 - start_state_tensor) + raw_loss_H * start_state_tensor
+    loss <- (per_row_loss * transition_w)$sum() / transition_w$sum()
 
     optimizer$zero_grad()
     loss$backward()
@@ -322,39 +320,28 @@ for (epoch in 1:epochs) {
 }
 plot(loss_curve, type = "l")
 
-## Fix 2 (uncomment after testing Fix 1 alone):
-## STAGE 2: Fine-tune on final transitions only
-## Lower LR, train only on the ~18k rows that actually get scored.
-## Shared layers already learned general dynamics in stage 1.
+## Fix 2: STAGE 2 (tested, hurts — kept commented out)
 # cat("\n===== STAGE 2: Fine-tune on final transitions only =====\n")
 # final_idx <- which(train_is_final == 1)
 # x_final <- x_tensor[final_idx, ]
 # y_final <- y_tensor[final_idx, ]
 # start_final <- start_state_tensor[final_idx, ]
 # cat("Final transition rows:", length(final_idx), "\n")
-#
 # optimizer_ft <- optim_adam(model$parameters, lr = 0.0001, weight_decay = 1e-4)
-#
 # epochs_s2 <- 100
 # loss_curve_s2 <- numeric(epochs_s2)
 # for (epoch in 1:epochs_s2) {
 #     shared_features <- model$shared(x_final)
 #     predictions_L2H <- model$head_L_to_H(shared_features)
 #     predictions_H2H <- model$head_H_to_H(shared_features)
-#
 #     raw_loss_L <- loss_fn_L2H(predictions_L2H, y_final)
 #     raw_loss_H <- loss_fn_H2H(predictions_H2H, y_final)
-#
 #     loss <- (raw_loss_L * (1 - start_final) + raw_loss_H * start_final)$mean()
-#
 #     optimizer_ft$zero_grad()
 #     loss$backward()
 #     optimizer_ft$step()
 #     loss_curve_s2[epoch] <- as.numeric(loss)
-#
-#     if (epoch %% 25 == 0) {
-#         cat(sprintf("S2 Epoch: %3d | Loss: %.4f\n", epoch, as.numeric(loss)))
-#     }
+#     if (epoch %% 25 == 0) cat(sprintf("S2 Epoch: %3d | Loss: %.4f\n", epoch, as.numeric(loss)))
 # }
 # plot(loss_curve_s2, type = "l", main = "Stage 2: fine-tune on final transitions")
 

@@ -186,3 +186,125 @@
 
 - **Diagnosis: training-evaluation mismatch.** Most transitions are easy same-state predictions (H→H, L→L between visits). The model spends capacity on short-term stability while competition only scores the final transition (→ a1c_2025). The architecture is sound; the training signal is diluted. Fixes planned: loss weighting on final transitions, two-stage training, trajectory summary features. Details in `ideas.md`.
 
+## Apr 5, 2026 (continued) — NN fixes & GLM improvements
+
+### NN systematic fix testing
+
+Subhrajyoty found ID mismatch in patient-level evaluation — `val_returned_ids` (from raw data) didn't align with `val_states` rows (from transition pipeline). Fixed by adding `is_target` flag inside `create_state_transitions()`. Old 60.4% was slightly inflated.
+
+| Step | Config | Patient F1 | Notes |
+|---|---|---|---|
+| Step 0 | Baseline (corrected eval, 200ep) | 59.7% | True baseline after ID fix |
+| Step 1 | Fix 1 (loss weighting 10x, 200ep) | 60.1% | +0.4%, modest |
+| Step 1b | Fix 1 (400ep) | 58.5% | Overfitting |
+| Step 2 | Fix 1 + Fix 2 (200+100ep fine-tune) | 58.8% | Stage 2 hurt |
+| Step 3 | **Fix 1 + Fix 3 (trajectory features, 200ep)** | **61.0%** | Best NN |
+| Step 3b | Fix 1 + Fix 3 (250ep) | 60.3% | Overfitting again |
+
+**Best NN: 61.0% (Fix 1 + Fix 3, 200ep).** Fix 1 (loss weighting) helps slightly. Fix 2 (fine-tuning) hurts. Fix 3 (EWMA, SD, frac_above_8) gives the biggest boost (+1.3% from baseline). 200 epochs is the sweet spot — more always overfits.
+
+### GLM pipeline: BMI features added
+
+- Added `bmi = weight / (height/100)^2` (filtered to 10-80) and `bmi_x_male` (BMI × gender interaction) to `subrata_features.R`. Rationale: men/women have different obesity-diabetes risk profiles.
+- Added `bmi`, `bmi_x_male`, `bmi_miss` to GLM formula, feat_cols, and GAM formula.
+- Uncommented glmnet and XGBoost, moved to end of `subrata_models.R` (heavy models run last).
+
+**Preliminary results (with BMI, before glmnet/XGBoost):**
+
+| Model | Val F1 |
+|---|---|
+| GLM | 61.9% |
+| GLM+wt | 61.5% |
+| Tree | degenerate |
+| GAM | 59.0% |
+| Ensemble 2 (GLM + GLM+wt) | **62.0%** |
+
+GLM improved from 59.9% → 61.9%. Ensemble 2-model hit 62.0%. Bug fix: glmnet needed `df_train_imputed` (not reassigned `df_train` which lacked `_miss` columns).
+
+**Full results with BMI (`subrata_models_5_12_00.Rout`):**
+
+| Model | Val F1 | Notes |
+|---|---|---|
+| GLM | 61.9% | +2.0% from BMI addition |
+| GLM+wt | 61.5% | |
+| Tree | 31.5% | Degenerate (all positive) |
+| GAM | 59.0% | |
+| Ensemble 2 (GLM+GLM_wt) | 62.0% | |
+| glmnet | 61.5% | Regularization hurts — worse than raw GLM |
+| **XGBoost** | **62.1%** | New best. Early-stopped 171/500 rounds |
+
+XGBoost is the new best at 62.1%. GLM jumped +2.0% from BMI — `bmi_x_male` interaction doing real work. glmnet underperforms raw GLM (regularization shrinks useful signals with 50+ features).
+
+### Additional features added (from Subhrajyoty's NN, not yet tested)
+
+Added to `subrata_features.R` and `subrata_models.R`:
+- `non_hdl = chol - hdl` — better CVD risk predictor than LDL alone
+- `ldl_hdl_ratio = ldl / hdl` — lipid ratio
+- `adi_discrepancy = adi_nation - adi_state` — localized deprivation context
+- `log_ed_visits`, `log_pcp_visits`, `log_admissions`, `log_total_meds` — log-transformed counts (right-skewed, helps linear models; XGBoost benefits from log-spacing for threshold splits)
+
+**Results with ALL new features (`subrata_models_5_12_34.Rout`):** hurt GLM/XGBoost, only helped glmnet.
+
+| Model | BMI only | +lipid/log | Change |
+|---|---|---|---|
+| GLM | 61.9% | 61.5% | -0.4% |
+| GLM+wt | 61.5% | 61.6% | flat |
+| Ensemble 2 | 62.0% | 61.8% | -0.2% |
+| glmnet | 61.5% | 62.1% | +0.6% |
+| XGBoost | 62.1% | 62.0% | -0.1% |
+
+**Reverted lipid/log features** (commented out). The log transforms likely added noise — the lipid ratios and ADI discrepancy are clinically grounded and might help on their own without the logs. To be tested separately after feature importance analysis.
+
+### XGBoost regularization & feature importance (`subrata_models_5_12_45.Rout`)
+
+Regularized XGBoost (max_depth=3, min_child_weight=20, subsample=0.7, colsample=0.6, gamma=1):
+
+| XGBoost | Train F1 | Val F1 | Train-Val gap |
+|---|---|---|---|
+| Original | 63.2% | 62.1% | 1.1% |
+| **Regularized** | 62.3% | **62.2%** | **0.1%** |
+
+Train-val gap nearly vanished. Val F1 ticked up to **62.2%** — new best overall.
+
+**Feature importance (top 6 account for ~90% of gain):**
+
+| Rank | Feature | Gain |
+|---|---|---|
+| 1 | `days_to_eval` | 27-32% |
+| 2 | `time_gap` | 13-21% |
+| 3 | `a1c_weighted` | 17-18% |
+| 4 | `frac_above_8` | 10% |
+| 5 | `a1c_latest` | 8-11% |
+| 6 | `frac_above_7` | 4% |
+
+Everything else <1% gain. Lipid values (`value_hdl`, `value_ldl`) at <0.5%, ADI at <0.3%, BMI not in top 20. The signal is concentrated in A1c trajectory + timing features. Demographics, lipids, comorbidities are noise at the margin. Decided not to add derived lipid ratios or ADI discrepancy — feature importance shows the base features they'd derive from carry near-zero signal.
+
+### Time-based validation NN (`subrata_nn_timesplit.R`)
+
+Tested Subrata's idea: instead of subject-based split, train on ALL patients' intermediate transitions + train patients' target transitions, evaluate on val patients' target transitions.
+
+| Approach | Val Patient F1 | Precision | Recall |
+|---|---|---|---|
+| Subject-split (Fix 1+3) | **61.0%** | 54.9% | 68.5% |
+| Time-split | 58.0% | 45.3% | 80.7% |
+
+**Failed.** Model over-predicts positives (recall 81%, precision 45%). The 28k additional intermediate transitions diluted the signal. Intermediate transitions (between regular visits, short gaps) are genuinely different from target transitions (last reading → 2025 eval, potentially years). Adding more of the former doesn't teach the latter. The competition question isn't "what's the next A1c state" — it's "what's the state after potentially years of treatment."
+
+This confirms Fix 2's failure: intermediate and target transitions are different tasks.
+
+### Summary — the 62.2% ceiling
+
+**The 62.2% ceiling is structural.** All model classes and approaches converge:
+
+| Model | Best Val F1 |
+|---|---|
+| XGBoost regularized | **62.2%** |
+| XGBoost original | 62.1% |
+| Ensemble 2 (GLM+GLM_wt) | 62.0% |
+| GLM (with BMI) | 61.9% |
+| glmnet (with lipid/log features) | 62.1% |
+| NN (Fix 1 + Fix 3) | 61.0% |
+| NN time-split | 58.0% |
+
+Feature importance (XGBoost) confirms: top 6 features (days_to_eval, time_gap, a1c_weighted, frac_above_8, a1c_latest, frac_above_7) account for ~90% of gain. Everything else <1%. The remaining errors are future deterioration (FN) and future treatment success (FP) — both require unobserved data (treatment adherence, lifestyle changes).
+
