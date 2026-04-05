@@ -1,0 +1,102 @@
+Returned val patients: 9056 
+Uncontrolled: 1691 ( 18.7 %)
+
+------ Classification counts (GLM+weights) ------
+
+  FN   FP   TN   TP 
+ 442 1366 5999 1249 
+
+------ a1c_latest by group ------
+[38;5;246m# A tibble: 4 × 7[39m
+  group     n  mean median   q25   q75 pct_6to8
+  [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<int>[39m[23m [3m[38;5;246m<dbl>[39m[23m  [3m[38;5;246m<dbl>[39m[23m [3m[38;5;246m<dbl>[39m[23m [3m[38;5;246m<dbl>[39m[23m    [3m[38;5;246m<dbl>[39m[23m
+[38;5;250m1[39m FN      442  7.04    6.9   6.5   7.5     81.2
+[38;5;250m2[39m FP     [4m1[24m366  8.11    7.7   7.2   8.6     58.2
+[38;5;250m3[39m TN     [4m5[24m999  6.25    6.2   5.8   6.7     66.0
+[38;5;250m4[39m TP     [4m1[24m249  9.39    8.8   7.9  10.3     28.2
+
+------ a1c_weighted by group ------
+[38;5;246m# A tibble: 4 × 6[39m
+  group     n  mean median   q25   q75
+  [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<int>[39m[23m [3m[38;5;246m<dbl>[39m[23m  [3m[38;5;246m<dbl>[39m[23m [3m[38;5;246m<dbl>[39m[23m [3m[38;5;246m<dbl>[39m[23m
+[38;5;250m1[39m FN      442  7.13   7.05  6.6   7.6 
+[38;5;250m2[39m FP     [4m1[24m366  8.17   7.8   7.3   8.59
+[38;5;250m3[39m TN     [4m5[24m999  6.29   6.3   5.85  6.7 
+[38;5;250m4[39m TP     [4m1[24m249  9.39   8.85  8    10.2 
+
+------ Distance from 7.0 boundary ------
+[38;5;246m# A tibble: 4 × 5[39m
+  group mean_dist median_dist pct_within_1 pct_within_0.5
+  [3m[38;5;246m<chr>[39m[23m     [3m[38;5;246m<dbl>[39m[23m       [3m[38;5;246m<dbl>[39m[23m        [3m[38;5;246m<dbl>[39m[23m          [3m[38;5;246m<dbl>[39m[23m
+[38;5;250m1[39m FN        0.726         0.5         81.2           54.1
+[38;5;250m2[39m FP        1.28          0.8         58.2           36.8
+[38;5;250m3[39m TN        0.854         0.8         66.0           34.8
+[38;5;250m4[39m TP        2.45          1.8         28.2           13.5
+
+------ n_a1c by group ------
+[38;5;246m# A tibble: 4 × 6[39m
+  group     n mean_n_a1c pct_1_reading pct_2_readings pct_3plus
+  [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<int>[39m[23m      [3m[38;5;246m<dbl>[39m[23m         [3m[38;5;246m<dbl>[39m[23m          [3m[38;5;246m<dbl>[39m[23m     [3m[38;5;246m<dbl>[39m[23m
+[38;5;250m1[39m FN      442       1.57          60.4           29.4      10.2
+[38;5;250m2[39m FP     [4m1[24m366       2.32          22.0           43.6      34.4
+[38;5;250m3[39m TN     [4m5[24m999       1.66          51.4           36.4      12.3
+[38;5;250m4[39m TP     [4m1[24m249       2.11          32.8           38.8      28.3
+
+------ Medication patterns by group ------
+[38;5;246m# A tibble: 4 × 8[39m
+  group     n mean_n_drugs pct_no_meds pct_insulin pct_modern pct_improving
+  [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<int>[39m[23m        [3m[38;5;246m<dbl>[39m[23m       [3m[38;5;246m<dbl>[39m[23m       [3m[38;5;246m<dbl>[39m[23m      [3m[38;5;246m<dbl>[39m[23m         [3m[38;5;246m<dbl>[39m[23m
+[38;5;250m1[39m FN      442        0.946        34.6        33.3       15.4          15.8
+[38;5;250m2[39m FP     [4m1[24m366        1.38         24.1        42.2       25.8          30.4
+[38;5;250m3[39m TN     [4m5[24m999        0.669        50.7        19.4       12.7          16.4
+[38;5;250m4[39m TP     [4m1[24m249        1.34         21.9        48.4       22.2          30.3
+[38;5;246m# ℹ 1 more variable: pct_worsening <dbl>[39m
+
+------ A1c trajectory by group ------
+[38;5;246m# A tibble: 4 × 6[39m
+  group     n mean_change mean_sd mean_range pct_still_high_improving
+  [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<int>[39m[23m       [3m[38;5;246m<dbl>[39m[23m   [3m[38;5;246m<dbl>[39m[23m      [3m[38;5;246m<dbl>[39m[23m                    [3m[38;5;246m<dbl>[39m[23m
+[38;5;250m1[39m FN      442     -[31m0[39m[31m.[39m[31m205[39m    0.888      1.18                    0.679 
+[38;5;250m2[39m FP     [4m1[24m366     -[31m0[39m[31m.[39m[31m218[39m    0.995      1.58                   30.1   
+[38;5;250m3[39m TN     [4m5[24m999     -[31m0[39m[31m.[39m[31m106[39m    0.467      0.574                   0.066[4m7[24m
+[38;5;250m4[39m TP     [4m1[24m249     -[31m0[39m[31m.[39m[31m0[39m[31m78[4m9[24m[39m   1.36       2.14                   31.7   
+
+------ Demographics by group ------
+[38;5;246m# A tibble: 4 × 4[39m
+  group     n mean_age pct_male
+  [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<int>[39m[23m    [3m[38;5;246m<dbl>[39m[23m    [3m[38;5;246m<dbl>[39m[23m
+[38;5;250m1[39m FN      442     64.8     46.8
+[38;5;250m2[39m FP     [4m1[24m366     66.0     54.1
+[38;5;250m3[39m TN     [4m5[24m999     66.4     42.5
+[38;5;250m4[39m TP     [4m1[24m249     63.5     53.7
+
+------ Height / Weight by group ------
+[38;5;246m# A tibble: 4 × 6[39m
+  group     n mean_height mean_weight pct_height_miss pct_weight_miss
+  [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<int>[39m[23m       [3m[38;5;246m<dbl>[39m[23m       [3m[38;5;246m<dbl>[39m[23m           [3m[38;5;246m<dbl>[39m[23m           [3m[38;5;246m<dbl>[39m[23m
+[38;5;250m1[39m FN      442        171.        93.5            72.6            71.0
+[38;5;250m2[39m FP     [4m1[24m366        170.        97.2            81.6            80.6
+[38;5;250m3[39m TN     [4m5[24m999        170.        96.8            83.2            81.9
+[38;5;250m4[39m TP     [4m1[24m249        170.        95.9            76.3            75.5
+
+------ Cross-model agreement on misclassification ------
+How many models get it right (out of 4):
+[38;5;246m# A tibble: 4 × 6[39m
+  group correct_0 correct_1 correct_2 correct_3 correct_4
+  [3m[38;5;246m<chr>[39m[23m     [3m[38;5;246m<int>[39m[23m     [3m[38;5;246m<int>[39m[23m     [3m[38;5;246m<int>[39m[23m     [3m[38;5;246m<int>[39m[23m     [3m[38;5;246m<int>[39m[23m
+[38;5;250m1[39m FN          315        77        48         2         0
+[38;5;250m2[39m FP          732       266       336        32         0
+[38;5;250m3[39m TN            0         1        71       193      [4m5[24m734
+[38;5;250m4[39m TP            0        12        84       159       994
+
+Patients ALL 4 models get wrong:
+  n = 1047 
+  FN: 315  FP: 732 
+  a1c_latest — mean: 8.19  median: 7.9 
+  a1c_weighted — mean: 8.23  median: 7.98 
+  n_a1c — mean: 1.99 
+  n_drug_classes — mean: 1.18 
+
+------ Plots saved to figures/misclass_eda.pdf ------
+pdf 
+  2 
