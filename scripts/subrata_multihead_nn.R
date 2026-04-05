@@ -43,11 +43,19 @@ create_state_transitions <- function(dat) {
             state_start = if_else(value > 8.0, "H", "L"),
             t_end = lead(time, 1),
             state_end = lead(if_else(value > 8.0, "H", "L"), 1),
+            end_var = lead(variable, 1)
         ) %>%
         ungroup() %>%
         filter(!is.na(t_end)) %>%
         mutate(delta_t = if_else(t_end > t_start + 0.01, t_end - t_start, 0.01)) %>%
-        select(id, t_start, t_end, delta_t, state_start, state_end)
+        select(id, t_start, t_end, delta_t, state_start, state_end, end_var) %>%
+        group_by(id) %>%
+        mutate(is_final = as.numeric(row_number() == n())) %>%
+        ungroup() %>%
+        # is_target: transition ends at a1c_2025 (competition-relevant)
+        # Derived from same pipeline as features — no ID mismatch possible
+        mutate(is_target = as.numeric(end_var == "a1c_6")) %>%
+        select(-end_var)
 
     events <- transitions %>%
         select(id, t_start) %>%
@@ -118,8 +126,26 @@ create_state_transitions <- function(dat) {
         mutate(
             a1c_latest = exec(coalesce, !!!syms(paste0("a1c_", 5:1))), # latest a1c value
             n_a1c = rowSums(!is.na(across(a1c_1:a1c_5))) # number of readings
+            ## Fix 3 (uncomment after testing Fix 1 alone):
+            # a1c_ewma = {
+            #     vals <- as.matrix(pick(a1c_1:a1c_5))
+            #     w <- matrix(0.5^(4:0), nrow = nrow(vals), ncol = 5, byrow = TRUE)
+            #     present <- !is.na(vals)
+            #     vals[is.na(vals)] <- 0
+            #     rowSums(vals * w * present) / rowSums(w * present)
+            # },
+            # a1c_sd = {
+            #     vals <- as.matrix(pick(a1c_1:a1c_5))
+            #     s <- apply(vals, 1, sd, na.rm = TRUE)
+            #     replace(s, is.na(s), 0)
+            # },
+            # frac_above_8 = {
+            #     vals <- as.matrix(pick(a1c_1:a1c_5))
+            #     rowSums(vals >= 8, na.rm = TRUE) / n_a1c
+            # }
         ) %>%
         select(id, a1c_1, a1c_latest, n_a1c)
+        # Fix 3: add a1c_ewma, a1c_sd, frac_above_8 to select() when uncommenting above
     patient_vars <- patient_vars %>% left_join(patient_a1c_measures, by = "id")
 
     transitions <- transitions %>%
@@ -156,6 +182,8 @@ create_state_transitions <- function(dat) {
 
     continuous_features <- c(
         "delta_t", "log_delta_t", "a1c_latest",
+        # Fix 3: uncomment when adding trajectory features
+        # "a1c_ewma", "a1c_sd", "frac_above_8",
         "measure_height", "measure_weight", "bmi",
         "measure_ldl", "measure_hdl", "measure_chol", "non_hdl", "ldl_hdl_ratio",
         "age", "adi_state", "adi_nation", "adi_discrepancy",
@@ -176,19 +204,25 @@ create_state_transitions <- function(dat) {
 
 train_states <- create_state_transitions(train_dat)
 train_ids <- train_states$id
+train_is_final <- train_states$is_final
+train_is_target <- train_states$is_target
 train_states <- train_states %>% select(-id)
 val_states <- create_state_transitions(val_dat)
 val_ids <- val_states$id
+val_is_final <- val_states$is_final
+val_is_target <- val_states$is_target
 val_states <- val_states %>% select(-id)
 
 train_states
 table(train_states$state_start_num, train_states$state_end_num)
+cat("Final transitions (train):", sum(train_is_final), "of", length(train_is_final), "\n")
 
 # data to tensor
 library(torch)
 set.seed(1234)
 
-x_tensor <- torch_tensor(as.matrix(train_states %>% select(-c(state_start_num, state_end_num))), dtype = torch_float())
+# NOTE: exclude is_final/is_target from features — they're metadata, not NN inputs
+x_tensor <- torch_tensor(as.matrix(train_states %>% select(-c(state_start_num, state_end_num, is_final, is_target))), dtype = torch_float())
 start_state_tensor <- torch_tensor(as.matrix(train_states$state_start_num), dtype = torch_float())
 y_tensor <- torch_tensor(as.matrix(train_states$state_end_num), dtype = torch_float())
 
@@ -228,8 +262,8 @@ transition_multi_head <- nn_module(
     }
 )
 
-dim(x_tensor)
-model <- transition_multi_head(input_dim = 55, hidden_dim = 32)
+cat("Input dim:", ncol(x_tensor), "\n")
+model <- transition_multi_head(input_dim = ncol(x_tensor), hidden_dim = 32)
 
 # print model size
 sum(sapply(model$parameters, function(p) {
@@ -237,35 +271,46 @@ sum(sapply(model$parameters, function(p) {
 }))
 
 
-# Calculate exact inverse ratios for pos_weight
-weight_L2H <- 26774 / 2785 # ~9.61
-weight_H2H <- 2837 / 4208 # ~0.67
+# Class-specific pos_weight (handles class imbalance within each head)
+n_L2L <- sum(train_states$state_start_num == 0 & train_states$state_end_num == 0)
+n_L2H <- sum(train_states$state_start_num == 0 & train_states$state_end_num == 1)
+n_H2L <- sum(train_states$state_start_num == 1 & train_states$state_end_num == 0)
+n_H2H <- sum(train_states$state_start_num == 1 & train_states$state_end_num == 1)
+weight_L2H <- n_L2L / n_L2H
+weight_H2H <- n_H2L / n_H2H
+cat(sprintf("Class weights: L->H = %.2f, H->H = %.2f\n", weight_L2H, weight_H2H))
+
 loss_fn_L2H <- nn_bce_with_logits_loss(
     pos_weight = torch_tensor(weight_L2H, dtype = torch_float()),
-    reduction = "none" # We need element-wise loss to apply the mask
+    reduction = "none"
 )
 loss_fn_H2H <- nn_bce_with_logits_loss(
     pos_weight = torch_tensor(weight_H2H, dtype = torch_float()),
     reduction = "none"
 )
 
+## Fix 1 (uncomment to test loss weighting — run baseline first):
+# final_upweight <- 10.0
+# transition_w <- torch_tensor(ifelse(train_is_final == 1, final_upweight, 1.0), dtype = torch_float())$unsqueeze(2)
+
 optimizer <- optim_adam(model$parameters, lr = 0.001, weight_decay = 1e-4)
 
 epochs <- 200
 loss_curve <- numeric(epochs)
 for (epoch in 1:epochs) {
-    shared_features <- model$shared(x_tensor) # forward pass
+    shared_features <- model$shared(x_tensor)
     predictions_L2H <- model$head_L_to_H(shared_features)
     predictions_H2H <- model$head_H_to_H(shared_features)
 
-    # Calculate unreduced losses
     raw_loss_L <- loss_fn_L2H(predictions_L2H, y_tensor)
     raw_loss_H <- loss_fn_H2H(predictions_H2H, y_tensor)
 
-    # The final loss only averages over the active, properly weighted rows
+    # Original: equal weight on all transitions
     loss <- (raw_loss_L * (1 - start_state_tensor) + raw_loss_H * start_state_tensor)$mean()
+    ## Fix 1: uncomment below (and comment line above) to upweight final transitions
+    # per_row_loss <- raw_loss_L * (1 - start_state_tensor) + raw_loss_H * start_state_tensor
+    # loss <- (per_row_loss * transition_w)$sum() / transition_w$sum()
 
-    # Backward pass and optimize
     optimizer$zero_grad()
     loss$backward()
     optimizer$step()
@@ -276,6 +321,42 @@ for (epoch in 1:epochs) {
     }
 }
 plot(loss_curve, type = "l")
+
+## Fix 2 (uncomment after testing Fix 1 alone):
+## STAGE 2: Fine-tune on final transitions only
+## Lower LR, train only on the ~18k rows that actually get scored.
+## Shared layers already learned general dynamics in stage 1.
+# cat("\n===== STAGE 2: Fine-tune on final transitions only =====\n")
+# final_idx <- which(train_is_final == 1)
+# x_final <- x_tensor[final_idx, ]
+# y_final <- y_tensor[final_idx, ]
+# start_final <- start_state_tensor[final_idx, ]
+# cat("Final transition rows:", length(final_idx), "\n")
+#
+# optimizer_ft <- optim_adam(model$parameters, lr = 0.0001, weight_decay = 1e-4)
+#
+# epochs_s2 <- 100
+# loss_curve_s2 <- numeric(epochs_s2)
+# for (epoch in 1:epochs_s2) {
+#     shared_features <- model$shared(x_final)
+#     predictions_L2H <- model$head_L_to_H(shared_features)
+#     predictions_H2H <- model$head_H_to_H(shared_features)
+#
+#     raw_loss_L <- loss_fn_L2H(predictions_L2H, y_final)
+#     raw_loss_H <- loss_fn_H2H(predictions_H2H, y_final)
+#
+#     loss <- (raw_loss_L * (1 - start_final) + raw_loss_H * start_final)$mean()
+#
+#     optimizer_ft$zero_grad()
+#     loss$backward()
+#     optimizer_ft$step()
+#     loss_curve_s2[epoch] <- as.numeric(loss)
+#
+#     if (epoch %% 25 == 0) {
+#         cat(sprintf("S2 Epoch: %3d | Loss: %.4f\n", epoch, as.numeric(loss)))
+#     }
+# }
+# plot(loss_curve_s2, type = "l", main = "Stage 2: fine-tune on final transitions")
 
 # let's try to do inference
 probs <- torch_sigmoid(model(x_tensor, start_state_tensor))
@@ -298,7 +379,7 @@ compute_metrics(
 
 
 # validation set inference
-val_x <- torch_tensor(as.matrix(val_states %>% select(-c(state_start_num, state_end_num))), dtype = torch_float())
+val_x <- torch_tensor(as.matrix(val_states %>% select(-c(state_start_num, state_end_num, is_final, is_target))), dtype = torch_float())
 val_start_state <- torch_tensor(as.matrix(val_states$state_start_num), dtype = torch_float())
 val_probs <- torch_sigmoid(model(val_x, val_start_state))
 cat("\n----- Val: transition-level metrics (all transitions) -----\n")
@@ -322,20 +403,16 @@ compute_metrics(
 # Result: transition F1 = 69.4%, but patient-level (competition) F1 = 60.4%.
 # Comparable to but slightly below GLM+wt (61.7%).
 
-val_returned_ids <- val_dat$measurements %>%
-    filter(variable == "a1c_2025", !is.na(time)) %>%
-    pull(id)
-
+# Use is_target (from same pipeline as predictions) instead of separately
+# computed val_returned_ids — avoids ID mismatch between raw data and val_states
 val_patient_level <- tibble(
     id = val_ids,
     prob = as.numeric(val_probs),
     true_label = val_states$state_end_num == 1,
-    start_state = val_states$state_start_num
+    start_state = val_states$state_start_num,
+    is_target = val_is_target
 ) %>%
-    group_by(id) %>%
-    slice_tail(n = 1) %>%
-    ungroup() %>%
-    filter(id %in% val_returned_ids)
+    filter(is_target == 1)  # only transitions ending at a1c_2025
 
 cat("\n=== PATIENT-LEVEL Val Metrics (competition metric) ===\n")
 cat("Returned val patients:", nrow(val_patient_level), "\n")
@@ -362,7 +439,7 @@ cat("\n----- Test: transition-level metrics (all transitions) -----\n")
 test_states <- create_state_transitions(test_dat)
 test_ids <- test_states$id
 test_states <- test_states %>% select(-id)
-test_x <- torch_tensor(as.matrix(test_states %>% select(-state_start_num, -state_end_num)), dtype = torch_float())
+test_x <- torch_tensor(as.matrix(test_states %>% select(-state_start_num, -state_end_num, -is_final, -is_target)), dtype = torch_float())
 test_start_state <- torch_tensor(as.matrix(test_states$state_start_num), dtype = torch_float())
 test_probs <- torch_sigmoid(model(test_x, test_start_state))
 test_th <- ifelse(test_states$state_start_num == 0, thresh0["best_th"], thresh1["best_th"])
