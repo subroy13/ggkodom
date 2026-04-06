@@ -338,7 +338,9 @@ cat("\n------ XGBoost ---------\n")
 library(xgboost)
 
 # subset to mask == 1
-df_train <- 
+# df_train <- df_train[df_train$mask == 1, ]
+# df_val <- df_val[df_val$mask == 1, ]
+
 
 xgb_train <- xgb.DMatrix(
     data = as.matrix(df_train[, feat_cols]),
