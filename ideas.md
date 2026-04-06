@@ -282,3 +282,153 @@ About 1/3 of patients have no A1c 2025 measurement (they didn't return for follo
 **Semi-supervised angle (Subhrajyoti's idea):** These known-label patients could be leveraged during training — even though competition scoring is on returned patients only, incorporating the non-returned patients as guaranteed negatives could help calibrate the decision boundary. This is analogous to semi-supervised learning where we have labeled and pseudo-labeled data. Currently our models DO train on all patients (including non-returned as negatives), but a more deliberate approach might weight them differently or use them for regularization.
 
 **F1 impact:** When predicting on the full test set (including non-returned), the non-returned patients are trivially correct predictions. If competition scoring includes them, our effective F1 improves because precision goes up (fewer false positives among the easily-classified non-returned). Even if scored on returned only, knowing which test patients are non-returned lets us avoid false positives there entirely.
+
+---
+
+## Apr 6, 2026 — Continuous-time A1c dynamics: CTMC, GP, and time-weighted features
+
+### The core insight (from transition-level vs patient-level F1 gap)
+
+The NN transition model has 69.4% F1 on all transitions but 59.7% on patient-level (final transitions). The 9.5pp gap exists because **transition dynamics are non-stationary across time scales.**
+
+Model this with a **continuous-time Markov chain (CTMC)** for the binary state S(t) ∈ {L, H} where H = A1c ≥ 8:
+
+$$Q = \begin{pmatrix} -q_{LH} & q_{LH} \\ q_{HL} & -q_{HL} \end{pmatrix}$$
+
+The transition probability matrix over time interval Δt is:
+
+$$P(\Delta t) = \exp(Q \cdot \Delta t)$$
+
+Key properties:
+- **As Δt → 0:** P(Δt) → I (identity). Persistence dominates. Short-horizon prediction is easy — this is why transition-level F1 is high (87% of transitions are same-state).
+- **As Δt → ∞:** P(Δt) → π (stationary distribution). π_H = q_LH / (q_LH + q_HL). The current state becomes uninformative — prediction reverts to the base rate.
+- **At intermediate Δt:** P(Δt) smoothly interpolates between persistence and equilibrium.
+
+For a 2-state CTMC, the explicit solution is:
+
+$$P(H \text{ at } t+\Delta t \mid L \text{ at } t) = \pi_H (1 - e^{-(q_{LH}+q_{HL})\Delta t})$$
+$$P(H \text{ at } t+\Delta t \mid H \text{ at } t) = \pi_H + (1-\pi_H) e^{-(q_{LH}+q_{HL})\Delta t}$$
+
+where the decay rate is λ = q_LH + q_HL. This gives us:
+- **One feature per patient:** P(H at t_2025 | last_state, time_gap) — combines state and time gap in the correct functional form.
+- The "correct" form is NOT linear in time_gap (which is what GLM assumes) — it's exponential decay toward equilibrium.
+
+### Connection to continuous-time ACF and memory timescale
+
+For the continuous A1c process (not just the binary state), model as an Ornstein-Uhlenbeck (OU) process:
+
+$$dY(t) = -\frac{1}{\tau}(Y(t) - \mu) dt + \sigma dW(t)$$
+
+This is the continuous-time analog of AR(1). The autocorrelation function is:
+
+$$\rho(\Delta t) = \exp(-\Delta t / \tau)$$
+
+where τ is the **memory timescale** — how long an A1c reading stays informative. From the GEE, we know AR(1) per visit ≈ 0.69. If the typical visit gap is Δt_visit, then τ = -Δt_visit / ln(0.69) ≈ Δt_visit / 0.37 ≈ 2.7 × Δt_visit.
+
+The **variogram** γ(Δt) = Var(Y(t) - Y(t+Δt)) / 2 = σ² (1 - exp(-Δt/τ)) gives another way to estimate τ from the data.
+
+### Connection to Gaussian processes
+
+The OU process IS a GP with Matérn-1/2 kernel:
+
+$$K(t, t') = \sigma_f^2 \exp\left(-\frac{|t - t'|}{\ell}\right)$$
+
+where ℓ = τ (the lengthscale = memory timescale).
+
+For each patient with readings {(t_1, y_1), ..., (t_n, y_n)}, the GP posterior at prediction time t* is:
+
+$$\mu_* = \mu + \mathbf{k}_*^T (\mathbf{K} + \sigma_n^2 \mathbf{I})^{-1} (\mathbf{y} - \mu)$$
+$$\sigma_*^2 = K(t_*, t_*) - \mathbf{k}_*^T (\mathbf{K} + \sigma_n^2 \mathbf{I})^{-1} \mathbf{k}_*$$
+
+where **k*** = [K(t*, t_1), ..., K(t*, t_n)]^T.
+
+**Key insight: this unifies everything we've tried.**
+
+For a patient with **1 reading** at time t_1 with value y_1, predicting at t*:
+
+$$\mu_* = \mu + \frac{\sigma_f^2 e^{-|t_* - t_1|/\tau}}{\sigma_f^2 + \sigma_n^2} (y_1 - \mu)$$
+
+This has three components:
+1. **Shrinkage toward μ:** factor σ_f²/(σ_f²+σ_n²) — same as lmer BLUP shrinkage (≈ 0.59 from our lmer)
+2. **Temporal decay:** factor exp(-Δt/τ) — new! Prediction decays toward μ as time gap grows
+3. **Deviation from mean:** (y_1 - μ) — the patient's individual signal
+
+For Δt → 0 (recent reading): this reduces to the lmer BLUP.
+For Δt → ∞ (stale reading): this reduces to μ (population mean = base rate).
+
+The GP prediction variance σ²* captures uncertainty — it grows with time gap. This is a genuinely new feature that neither EWMA nor lmer provides.
+
+For **n readings**: the GP properly weights all readings by their time proximity to t*, handling irregular spacing naturally. The effective weights are determined by the kernel, not by ordinal position (like EWMA) or equal weighting (like lmer).
+
+### Connection to existing lmer results
+
+From the lmer exploration:
+- σ_f² ≈ 1.950 (random intercept variance)
+- σ_n² ≈ 1.352 (residual variance)
+- Shrinkage for n=1: σ_f²/(σ_f²+σ_n²) = 0.591 ← matches lmer exactly
+
+What lmer MISSED: the temporal decay exp(-Δt/τ). The lmer BLUP is the GP prediction at Δt = 0 (prediction at the same time as the reading). For predicting at t_2025 with time_gap > 0, the GP properly accounts for the decay.
+
+### Time-weighted EWMA
+
+As a simpler feature (no full GP), replace the per-reading EWMA decay with per-time decay:
+
+$$\text{tw\_ewma} = \frac{\sum_{k} \exp(-(t_{\text{latest}} - t_k)/\tau) \cdot y_k}{\sum_{k} \exp(-(t_{\text{latest}} - t_k)/\tau)}$$
+
+This weights readings by their temporal proximity to the latest reading, rather than by ordinal position. For equally-spaced readings, it approximates regular EWMA with a time-appropriate λ.
+
+### What to estimate from data
+
+1. **τ (memory timescale):** from the empirical variogram or continuous-time ACF
+2. **q_LH, q_HL (CTMC rates):** from observed state transitions, adjusted for time gaps
+3. **σ_f², σ_n² (GP hyperparameters):** from lmer (already done: 1.950, 1.352) or by MML
+
+### Expected impact
+
+- **CTMC feature** is a principled interaction of last_state × time_gap — the functional form XGBoost approximates with tree splits. Might help GLM more than XGBoost.
+- **Time-weighted EWMA** is a better summary than ordinal EWMA for patients with spread-out readings.
+- **GP prediction** subsumes both and adds prediction variance (uncertainty). This is the theoretically optimal approach.
+- All three are bounded by the structural ceiling: the future treatment response is unobserved regardless of how well we summarize the past.
+
+---
+
+## Apr 6, 2026 — Multi-scale ACF reveals negative within-patient autocorrelation
+
+### The key finding: ICC = 0.924, within-patient ACF < 0
+
+92.4% of A1c variance is between patients. Within-patient variation is only 7.6%, and its autocorrelation is **negative** at all lags: ρ_within ≈ −0.1 at Δt=1 week, declining to ≈ −0.65 at Δt=6 months.
+
+**This is treatment-induced oscillation:**
+- High A1c → treatment → overcorrection below patient mean → treatment relaxes → drift back up → high A1c → ...
+- The process is mean-reverting with overshoot, NOT a standard AR/OU process
+
+**Simpson's paradox:** Raw (unconditional) correlation is positive (0.72 → 0.46) because between-patient variance dominates. Within patients, readings oscillate around the patient mean. Between patients, high-A1c patients stay high. The raw positive correlation is entirely a between-patient effect.
+
+### Implications for modeling
+
+1. **Standard time-series models are wrong for within-patient dynamics.** AR, OU, GP with Matérn/SE kernel all assume positive decaying autocorrelation. The within-patient process has negative ACF — these models can't capture this.
+
+2. **The correct within-patient model** would be something like a damped harmonic oscillator or a controlled OU with treatment kicks:
+   $$dY = -\alpha(Y - \mu_i) dt + \beta \cdot \mathbf{1}(Y > 8) \cdot (Y_{target} - Y) dt + \sigma dW$$
+   where the second term is treatment pulling Y toward a target when above threshold.
+
+3. **But it doesn't matter for prediction** because within-patient dynamics explain only 7.6% of variance. The patient's "type" (a1c_weighted ≈ patient mean) IS the prediction. Trajectory is second-order.
+
+4. **The ceiling is mathematically bounded:** at most ~7.6% of variance is available from within-patient dynamics → at most ~1-2% F1 improvement beyond a1c_weighted alone. Observed: a1c_weighted = 61.4%, best model = 63%. Consistent.
+
+### Multi-scale variogram
+
+The within-patient variogram has:
+- Nugget = 73% of sill (most variation is noise)
+- Short scale: τ₁ = 8 days (25% of within-patient variance)
+- Long scale: τ₂ = 5+ years (2% — effectively constant)
+- Residuals show periodic pattern (~6 month period) — possibly medication cycles or scheduled visits
+
+### For the presentation
+
+These findings tell a clean story:
+1. "Who you are" (patient type) predicts 99% → a1c_weighted captures this
+2. "Where you're going" (trajectory) adds 1% → treatment dynamics, mostly noise
+3. The ceiling is NOT a modeling failure — it's the data telling us that patient identity overwhelms trajectory
+4. Treatment creates oscillation (negative ACF) — fundamentally different from standard time-series
+5. The CTMC relaxation time (8 months) sets the prediction horizon limit

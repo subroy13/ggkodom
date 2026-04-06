@@ -308,3 +308,192 @@ This confirms Fix 2's failure: intermediate and target transitions are different
 
 Feature importance (XGBoost) confirms: top 6 features (days_to_eval, time_gap, a1c_weighted, frac_above_8, a1c_latest, frac_above_7) account for ~90% of gain. Everything else <1%. The remaining errors are future deterioration (FN) and future treatment success (FP) — both require unobserved data (treatment adherence, lifestyle changes).
 
+
+## Apr 5, 2026 (night) — lmer longitudinal exploration & GEE
+
+### lmer exploration (`scripts/subrata_lmer_exploration.R`)
+
+Tested whether mixed model BLUPs (best linear unbiased predictors) from longitudinal A1c trajectory add predictive signal beyond hand-crafted EWMA/SD features.
+
+**Data sparsity killed random slopes.** 57.6% of patients have exactly 1 A1c reading. Random intercept + slope model (M2) is unidentifiable: 93,636 random effects > 74,981 observations. Only random intercept model (M1) is feasible on all patients. Random slope model fit successfully on ≥3 reading patients only (5,665 patients = 12%).
+
+**lmer M1 results:**
+- Fixed intercept = 7.11 (population mean A1c), fixed slope = −0.21/yr (slight average decline)
+- Random intercept SD = 1.40, Residual SD = 1.16
+- Shrinkage for 1-reading patients: BLUP = 59% raw + 41% population mean
+- Treatment flag (M3: prev_above_8) significant but small AIC improvement (288782 → 288708)
+
+**BLUPs are 98.8% redundant with a1c_weighted** (r = 0.988). For single-reading patients, correlation is 1.0 (BLUP is a linear rescaling of the single value). Shrinkage compresses the distribution (SD: 1.88 → 1.11) but doesn't improve ranking.
+
+**Single-feature comparison:**
+
+| Feature | Val F1 |
+|---|---|
+| a1c_weighted (EWMA) | **61.4%** |
+| total_intercept (BLUP) | 60.9% |
+| blup_intercept | 60.9% |
+| a1c_latest | 60.3% |
+| lmer_pred_a1c | 60.0% |
+
+EWMA wins because recency weighting matters more than shrinkage for predicting 2025 outcome.
+
+**Multi-feature evaluation:**
+
+| Model | Baseline | + BLUPs | Change |
+|---|---|---|---|
+| GLM | 61.6% | 61.3% | −0.3% (multicollinearity) |
+| XGBoost (reg) | 61.9% | 62.1% | +0.2% (noise) |
+
+In XGBoost + BLUPs, `lmer_pred_a1c` captured 49% of feature importance — but this just reorganizes how the same information enters the tree, without meaningful F1 gain.
+
+### GEE (geeglm) comparison
+
+- AR(1) within-patient correlation = 0.691 (strong — consecutive A1c readings highly correlated)
+- Fixed effects nearly identical to lmer: GEE intercept = 7.11, slope = −0.18 (vs lmer −0.21; marginal vs conditional)
+- GEE gives population-averaged effects only — no patient-specific predictions. Useless for individual prediction.
+
+### Conclusion
+
+Longitudinal mixed modeling can't help because:
+1. 58% have 1 reading — no within-patient trajectory to model
+2. EWMA already captures level information with better recency weighting
+3. BLUPs add shrinkage but shrinkage hurts ranking (compresses extremes that should be extreme)
+4. GEE gives no patient-specific output
+
+The F1 ceiling isn't a modeling problem — it's a data problem (sparse observations + unobserved treatment dynamics).
+
+## Apr 6, 2026 — Continuous-time dynamics: variogram, CTMC, GP, multi-scale ACF
+
+### Variogram & memory timescale (`scripts/subrata_continuous_time.R`)
+
+Computed empirical variogram from 40,453 within-patient A1c pairs. **The variogram is non-monotonic:**
+
+| Δt (yr) | γ(Δt) | Pattern |
+|---|---|---|
+| 0.008 | 1.25 | rising |
+| 0.074 | 1.67 | rising |
+| 0.175 | **2.04** | PEAK |
+| 0.256 | 1.47 | drops |
+| 0.459 | 1.32 | still lower |
+| 0.533 | 1.15 | minimum |
+| 0.689 | 1.71 | rises again |
+
+**The OU (single-scale) model is wrong.** NLS fit forced τ = 4 days (nonsensical). The non-monotonic pattern is a "treatment effect ridge":
+1. Δt < 2 months: treatment actively changing A1c → large differences → high γ
+2. Δt = 3-6 months: treatment stabilized → readings converge → γ drops
+3. Δt > 6 months: new perturbations (adherence decay, new conditions) → γ rises
+
+**The process has at least 2-3 timescales:** measurement noise (days), treatment response (months), patient-level traits (years).
+
+### CTMC transition rates
+
+Estimated continuous-time Markov chain rates from 28,163 observed transitions:
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| q_LH | 0.24/yr | Annual deterioration rate |
+| q_HL | 1.25/yr | Annual treatment success rate |
+| q_HL/q_LH | **5.2×** | Treatment 5× faster than deterioration |
+| π_H (stationary) | 0.160 | Long-run 16% uncontrolled |
+| 1/λ (relaxation) | **0.67 yr** | After ~8 months, current state uninformative |
+
+P(uncontrolled at t+Δt | current state):
+
+| Δt | P(H\|L) | P(H\|H) | Gap |
+|---|---|---|---|
+| 0.1 yr | 2.2% | 88.4% | 86pp |
+| 0.5 yr | 8.4% | 55.8% | 47pp |
+| 1.0 yr | 12.4% | 34.9% | 22pp |
+| 2.0 yr | 15.2% | 20.3% | 5pp |
+| 5.0 yr | 16.0% | 16.1% | ~0 |
+
+**The 8-month relaxation time explains why `time_gap` is such a powerful feature.** Patients with long time gaps are essentially unpredictable from their last state.
+
+### GP prediction (OU kernel)
+
+GP with OU kernel failed because τ = 4 days → kernel decays to zero for any practical time gap → predictions collapse to population mean (7.126) for everyone. GP needs a multi-scale kernel or manually-set lengthscale to work.
+
+### Time-weighted EWMA
+
+With τ = 4 days, tw_ewma ≈ a1c_latest (only latest reading gets weight). Correlation tw_ewma vs a1c_weighted = 0.97. As single feature: tw_ewma 60.4% ≈ a1c_latest 60.3% < a1c_weighted 61.4%.
+
+### Feature evaluation
+
+**Single feature:**
+
+| Feature | Val F1 |
+|---|---|
+| a1c_weighted | **61.4%** |
+| tw_ewma | 60.4% |
+| a1c_latest | 60.3% |
+| ctmc_prob | 58.6% |
+| gp_mean | 31.5% (degenerate) |
+
+**XGBoost:**
+
+| Model | Val F1 |
+|---|---|
+| Baseline | **62.5%** |
+| + continuous-time features | 62.3% |
+
+`ctmc_prob` became XGBoost's #1 feature (25.1% gain) but didn't improve F1 — captures the same state × time_gap interaction the tree was already approximating.
+
+### Key insight
+
+The prediction ceiling is quantitatively explained by the CTMC relaxation time: after ~8 months, current A1c state is uninformative → prediction approaches the base rate (~16%). Most patients in the competition have time gaps > 8 months from their last reading to the 2025 evaluation. The model can only improve within the residual information not erased by time decay + treatment dynamics.
+
+### Multi-scale ACF & GP (`scripts/subrata_multiscale_acf.R`)
+
+**The most important finding of the entire project:**
+
+#### ICC = 0.924
+
+92.4% of A1c variance is BETWEEN patients, only 7.6% is WITHIN patients. This is why `a1c_weighted` (a patient-level summary) captures 99% of the predictive signal. Within-patient trajectory dynamics are bounded to 7.6% of variance — they CANNOT move F1 more than that.
+
+#### Within-patient ACF is NEGATIVE
+
+After demeaning within patient, ALL autocorrelations are negative (ρ = −0.10 at Δt=0.01yr to ρ = −0.66 at Δt=0.5yr). This means within a patient, consecutive readings tend to be on OPPOSITE sides of the patient's mean:
+- High reading → treatment → next reading drops BELOW patient mean (overcorrection)
+- Low reading → no intervention → drifts back up ABOVE patient mean
+
+This is treatment-induced oscillation. Standard time-series models (AR, OU, GP) assume POSITIVE decaying autocorrelation — they are fundamentally wrong for within-patient A1c dynamics. The correct model needs treatment as a mean-reverting force with overshoot.
+
+**Simpson's paradox:** The RAW (un-demeaned) correlation is positive (0.72 at short lags, 0.46 at long lags) because between-patient variance dominates. A patient at 9 today will likely read below 9 next time (negative within-patient), but still above the population mean 7.1 (positive raw correlation). The between-patient signal overwhelms the within-patient signal.
+
+#### Multi-scale variogram fit
+
+| Component | Variance | Timescale | % of within-patient |
+|---|---|---|---|
+| Nugget (noise) | c₀ = 1.178 | instantaneous | 73% |
+| Short scale | c₁ = 0.409 | τ₁ = 8 days | 25% |
+| Long scale | c₂ = 0.028 | τ₂ = 5+ years | 2% |
+
+73% of within-patient variance is instantaneous noise. Only 27% has temporal structure, and that structure has an 8-day timescale (too fast to matter for prediction).
+
+Residuals show a periodic pattern (peaks at Δt ≈ 2 months and ≈ 8 months) — possibly medication cycles or scheduled follow-ups.
+
+#### Feature evaluation
+
+| Feature | Val F1 | Notes |
+|---|---|---|
+| a1c_weighted | **61.40%** | Still the best single feature |
+| tw_ewma_long (τ=5yr) | 61.49% | ≈ equal weight to all readings (r=0.997 with EWMA) |
+| gp_ms_mean | 60.46% | Better than single-scale GP (31.5%) but still worse |
+| gp_ms_sd | 31.47% | Degenerate alone |
+
+| XGBoost | Val F1 |
+|---|---|
+| Baseline | 61.89% |
+| + multi-scale GP | 62.24% |
+
+`gp_ms_mean` captured 54% of XGBoost gain, `gp_ms_sd` 3.2%. But overall F1 within noise of previous best (62.2%).
+
+#### Theoretical significance
+
+The analysis reveals three layers of A1c variation:
+
+1. **Between-patient (92.4%):** Patient "type" — some patients are chronically high, others chronically low. Captured by a1c_weighted. This is the signal.
+2. **Within-patient noise (5.5%):** Measurement error, daily fluctuations, instantaneous treatment effects. This is irreducible noise.
+3. **Within-patient temporal (2%):** Structured treatment dynamics (negative ACF, oscillation). Too weak to improve prediction, but explains WHY trajectory features add so little.
+
+The ceiling is set by between-patient variation: once you know a patient's "typical A1c level" (a1c_weighted), the within-patient dynamics (7.6% of variance) can only move the needle by at most ~1-2% F1. This is consistent with what we observe: a1c_weighted alone = 61.4%, best model = 63%, maximum possible = ~65%.
