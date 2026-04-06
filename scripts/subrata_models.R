@@ -70,7 +70,8 @@ p1_thresh
 
 p1_val <- predict(m1, df_val, type = "response")
 compute_metrics(p1_val > p1_thresh["best_th"], df_val$target == "Uncontrolled", df_val$mask)
-prob_glm_val <- p1_val; th_glm <- p1_thresh["best_th"]
+prob_glm_val <- p1_val
+th_glm <- p1_thresh["best_th"]
 
 
 # ----------
@@ -87,7 +88,8 @@ p2_thresh
 
 p2_val <- predict(m2, df_val, type = "response")
 compute_metrics(p2_val > p2_thresh["best_th"], df_val$target == "Uncontrolled", df_val$mask)
-prob_glm_wt_val <- p2_val; th_glm_wt <- p2_thresh["best_th"]
+prob_glm_wt_val <- p2_val
+th_glm_wt <- p2_thresh["best_th"]
 
 
 # glmnet and XGBoost moved after ensemble (slower models run last)
@@ -100,8 +102,6 @@ prob_glm_wt_val <- p2_val; th_glm_wt <- p2_thresh["best_th"]
 # -------------
 library(rpart)
 library(rpart.plot)
-library(mgcv)
-
 
 # load training and validation data, but don't impute??
 train_dat <- readRDS("./data/processed/train.Rds")
@@ -152,22 +152,54 @@ dt_formula <- as.formula(paste("target ~", paste(feat_cols, collapse = " + ")))
 
 cat("\n------ Decision Tree (rpart) ---------\n")
 m1 <- rpart(dt_formula,
-    data = df_train, method = "class",
+    data = df_train_imputed, method = "class",
     control = rpart.control(cp = 0.005, maxdepth = 6, minsplit = 50)
 )
 
-p1_tr <- predict(m1, df_train, type = "prob")[, "Uncontrolled"]
+p1_tr <- predict(m1, df_train_imputed, type = "prob")[, "Uncontrolled"]
 p1_thresh <- best_f1_threshold(p1_tr, df_train$target == "Uncontrolled", df_train$mask)
 p1_thresh
 
-p1_val <- predict(m1, df_val, type = "prob")[, "Uncontrolled"]
+p1_val <- predict(m1, df_val_imputed, type = "prob")[, "Uncontrolled"]
 compute_metrics(p1_val > p1_thresh["best_th"], df_val$target == "Uncontrolled", df_val$mask)
-prob_tree_val <- p1_val; th_tree <- p1_thresh["best_th"]
+prob_tree_val <- p1_val
+th_tree <- p1_thresh["best_th"]
+
+rpart.plot(m1)
+
+# -------------
+# Model: Random Forest
+library(ranger)
+
+rf_model <- ranger(
+    dt_formula,
+    data = df_train_imputed,
+    num.trees = 200, # number of trees
+    importance = "impurity",
+    probability = TRUE,
+    mtry = 10,
+    max.depth = 7,
+    min.bucket = 25,
+    num.threads = 6
+)
+
+tmp <- df_train_imputed
+df_train_imputed <- df_val_imputed
+df_val_imputed <- tmp
+
+p1_tr <- predict(rf_model, df_train_imputed, type = "response")$predictions[, "Uncontrolled"]
+p1_thresh <- best_f1_threshold(p1_tr, df_train_imputed$target == "Uncontrolled", df_train_imputed$mask)
+p1_thresh
+
+p1_val <- predict(rf_model, df_val_imputed, type = "response")$predictions[, "Uncontrolled"]
+compute_metrics(p1_val > p1_thresh["best_th"], df_val_imputed$target == "Uncontrolled", df_val_imputed$mask)
 
 
 # -------------
 # Model: GAM
 # F1 Score: ~ 60%
+
+library(mgcv)
 
 cat("\n------ GAM ---------\n")
 m2 <- gam(
@@ -198,7 +230,8 @@ p2_thresh <- best_f1_threshold(p2_tr, df_train_imputed$target == "Uncontrolled",
 p2_thresh
 p2_val <- predict(m2, df_val_imputed, type = "response")
 compute_metrics(p2_val > p2_thresh["best_th"], df_val_imputed$target == "Uncontrolled", df_val_imputed$mask)
-prob_gam_val <- as.numeric(p2_val); th_gam <- p2_thresh["best_th"]
+prob_gam_val <- as.numeric(p2_val)
+th_gam <- p2_thresh["best_th"]
 
 
 #### SAVE VALIDATION PREDICTIONS ####
@@ -304,6 +337,9 @@ compute_metrics(p_glmnet_val > p_glmnet_thresh["best_th"], df_val_imputed$target
 cat("\n------ XGBoost ---------\n")
 library(xgboost)
 
+# subset to mask == 1
+df_train <- 
+
 xgb_train <- xgb.DMatrix(
     data = as.matrix(df_train[, feat_cols]),
     label = df_train$target == "Uncontrolled"
@@ -353,11 +389,11 @@ cat("\n------ XGBoost (regularized) ---------\n")
 params_reg <- list(
     objective = "binary:logistic",
     eval_metric = "logloss",
-    max_depth = 3,
+    max_depth = 5,
     eta = 0.05,
-    subsample = 0.7,
-    colsample_bytree = 0.6,
-    min_child_weight = 20,
+    subsample = 0.5,
+    colsample_bytree = 0.5,
+    min_child_weight = 10,
     gamma = 1
 )
 
@@ -381,3 +417,4 @@ compute_metrics(p_xgb_reg_val > p_xgb_reg_thresh["best_th"], df_val$target == "U
 cat("\n------ XGBoost (regularized) Feature Importance (top 20) ---------\n")
 imp_reg <- xgb.importance(feature_names = feat_cols, model = m_xgb_reg)
 print(imp_reg[1:min(20, nrow(imp_reg)), ], row.names = FALSE)
+

@@ -25,20 +25,20 @@ safe_divide <- function(num, den, default = 0) {
 best_f1_threshold <- function(probs, y_true, idx = rep(TRUE, length(probs))) {
   probs <- probs[idx]
   y_true <- as.integer(y_true[idx])
-  
+
   th_grid <- sort(unique(c(seq(0.05, 0.95, by = 0.01), probs)))
   th_grid <- th_grid[th_grid >= 0 & th_grid <= 1]
-  
+
   res <- lapply(th_grid, function(th) {
     pred <- as.integer(probs > th)
     tp <- sum(pred == 1 & y_true == 1)
     fp <- sum(pred == 1 & y_true == 0)
     fn <- sum(pred == 0 & y_true == 1)
-    
+
     precision <- safe_divide(tp, tp + fp, 0)
-    recall    <- safe_divide(tp, tp + fn, 0)
-    f1        <- safe_divide(2 * precision * recall, precision + recall, 0)
-    
+    recall <- safe_divide(tp, tp + fn, 0)
+    f1 <- safe_divide(2 * precision * recall, precision + recall, 0)
+
     tibble(
       best_th = th,
       best_f1 = f1,
@@ -46,25 +46,27 @@ best_f1_threshold <- function(probs, y_true, idx = rep(TRUE, length(probs))) {
       recall = recall
     )
   }) %>% bind_rows()
-  
-  res %>% arrange(desc(best_f1), best_th) %>% slice(1)
+
+  res %>%
+    arrange(desc(best_f1), best_th) %>%
+    slice(1)
 }
 
 compute_metrics <- function(pred, y_true) {
-  pred   <- as.integer(pred)
+  pred <- as.integer(pred)
   y_true <- as.integer(y_true)
-  
+
   tp <- sum(pred == 1 & y_true == 1)
   tn <- sum(pred == 0 & y_true == 0)
   fp <- sum(pred == 1 & y_true == 0)
   fn <- sum(pred == 0 & y_true == 1)
-  
-  accuracy    <- safe_divide(tp + tn, length(y_true), 0)
-  precision   <- safe_divide(tp, tp + fp, 0)
-  recall      <- safe_divide(tp, tp + fn, 0)
+
+  accuracy <- safe_divide(tp + tn, length(y_true), 0)
+  precision <- safe_divide(tp, tp + fp, 0)
+  recall <- safe_divide(tp, tp + fn, 0)
   specificity <- safe_divide(tn, tn + fp, 0)
-  f1          <- safe_divide(2 * precision * recall, precision + recall, 0)
-  
+  f1 <- safe_divide(2 * precision * recall, precision + recall, 0)
+
   out <- tibble(
     accuracy = accuracy,
     precision = precision,
@@ -73,7 +75,7 @@ compute_metrics <- function(pred, y_true) {
     f1 = f1,
     tp = tp, tn = tn, fp = fp, fn = fn
   )
-  
+
   print(out)
   invisible(out)
 }
@@ -82,7 +84,7 @@ fit_scaler <- function(df, cols) {
   tibble(
     feature = cols,
     mean = sapply(cols, function(x) mean(df[[x]], na.rm = TRUE)),
-    sd   = sapply(cols, function(x) sd(df[[x]], na.rm = TRUE))
+    sd = sapply(cols, function(x) sd(df[[x]], na.rm = TRUE))
   ) %>%
     mutate(
       mean = ifelse(is.na(mean) | is.nan(mean) | is.infinite(mean), 0, mean),
@@ -121,35 +123,21 @@ sanitize_df <- function(df) {
 # Load data
 ############################
 train_dat <- readRDS("./data/processed/train.Rds")
-val_dat   <- readRDS("./data/processed/val.Rds")
-test_dat  <- readRDS("./data/processed/test.Rds")
-
-############################
-# Optional visualization
-############################
-train_dat$measurements %>%
-  filter(variable %in% c("a1c_1", "a1c_2025")) %>%
-  select(id, variable, value) %>%
-  pivot_wider(names_from = variable, values_from = value) %>%
-  ggplot() +
-  geom_density(aes(x = a1c_1, fill = factor(a1c_2025)), alpha = 0.5) +
-  geom_vline(xintercept = 8, color = "red", linetype = "dashed") +
-  geom_vline(xintercept = 6.75, color = "black", linetype = "dashed") +
-  theme_bw()
+val_dat <- readRDS("./data/processed/val.Rds")
+test_dat <- readRDS("./data/processed/test.Rds")
 
 ############################
 # Feature engineering
 ############################
 create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = FALSE) {
-  
   measures <- dat$measurements
-  
+
   # Keep original target idea from your code:
   # convert a1c_2025 into pseudo a1c_6 so the transition framework works
   target_rows <- measures$variable == "a1c_2025"
   measures$variable[target_rows] <- "a1c_6"
   measures$value[target_rows] <- measures$value[target_rows] * 10
-  
+
   #####################################
   # A1c transitions (ordered by time)
   #####################################
@@ -157,7 +145,7 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
     filter(variable %in% paste0("a1c_", 1:6)) %>%
     drop_na(time, value) %>%
     arrange(id, time, variable)
-  
+
   transitions <- a1c_measures %>%
     group_by(id) %>%
     mutate(
@@ -174,8 +162,10 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
     mutate(
       delta_t = if_else(t_end > t_start + 0.01, t_end - t_start, 0.01)
     ) %>%
-    select(id, t_start, t_end, delta_t, value_start, value_end,
-           state_start, state_end, end_var) %>%
+    select(
+      id, t_start, t_end, delta_t, value_start, value_end,
+      state_start, state_end, end_var
+    ) %>%
     group_by(id) %>%
     mutate(
       is_final = as.numeric(row_number() == n())
@@ -184,12 +174,12 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
     mutate(
       is_target = as.numeric(end_var == "a1c_6")
     )
-  
+
   #####################################
   # Labs at transition time + recency
   #####################################
   lab_vars <- c("height", "weight", "ldl", "hdl", "chol")
-  
+
   events <- transitions %>%
     select(id, t_start) %>%
     tidyr::crossing(variable = lab_vars) %>%
@@ -229,7 +219,7 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
         ~ ifelse(is.na(.x) | is.nan(.x) | is.infinite(.x), 999, .x)
       )
     )
-  
+
   #####################################
   # Demographics + counts
   #####################################
@@ -260,7 +250,7 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
         ),
       by = "id"
     )
-  
+
   #####################################
   # Richer A1c temporal features
   #####################################
@@ -271,28 +261,22 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
     group_by(id) %>%
     summarise(
       n_a1c = n(),
-      
       a1c_first = first(value),
       a1c_latest = last(value),
       a1c_prev = ifelse(n() >= 2, dplyr::nth(value, n() - 1), NA_real_),
-      
       a1c_min = min(value, na.rm = TRUE),
       a1c_max = max(value, na.rm = TRUE),
       a1c_range = a1c_max - a1c_min,
       a1c_sd = ifelse(n() >= 2, sd(value, na.rm = TRUE), 0),
-      
       frac_above_8 = mean(value >= 8, na.rm = TRUE),
-      
       a1c_ewma = {
         vals <- value
         k <- length(vals)
         w <- 0.5^rev(seq_len(k) - 1)
         sum(vals * w) / sum(w)
       },
-      
       a1c_delta_last = ifelse(n() >= 2, last(value) - dplyr::nth(value, n() - 1), 0),
       a1c_delta_first_last = last(value) - first(value),
-      
       a1c_slope_last = {
         if (n() >= 2) {
           dt <- last(time) - dplyr::nth(time, n() - 1)
@@ -301,16 +285,13 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
           0
         }
       },
-      
       a1c_slope_global = {
         dt <- last(time) - first(time)
         ifelse(is.na(dt) | dt <= 0, 0, (last(value) - first(value)) / dt)
       },
-      
       a1c_time_span = ifelse(n() >= 2, max(time) - min(time), 0),
       last_a1c_high = as.numeric(last(value) >= 8),
       ever_high_a1c = as.numeric(any(value >= 8, na.rm = TRUE)),
-      
       n_a1c_crossings_8 = {
         vals <- value
         if (length(vals) >= 2) {
@@ -319,13 +300,12 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
           0
         }
       },
-      
       .groups = "drop"
     )
-  
+
   patient_vars <- patient_vars %>%
     left_join(patient_a1c_features, by = "id")
-  
+
   #####################################
   # Join everything
   #####################################
@@ -335,27 +315,22 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
     mutate(
       state_start_num = ifelse(state_start == "H", 1, 0),
       state_end_num = ifelse(state_end == "H", 1, 0),
-      
       bmi = if_else(
         measure_weight > 0 & measure_height > 0,
         measure_weight / (((measure_height + 0.01) / 100)^2),
         0
       ),
-      
       non_hdl = measure_chol - measure_hdl,
       ldl_hdl_ratio = ifelse(
         measure_hdl > 0 & measure_ldl > 0,
         measure_ldl / measure_hdl,
         0
       ),
-      
       months_elapsed = (delta_t + 1) / 30.42,
       ed_visit_rate = safe_divide(ed_visit, months_elapsed, 0),
       admission_rate = safe_divide(admission, months_elapsed, 0),
       pcp_visit_rate = safe_divide(pcp_visit, months_elapsed, 0),
-      
       log_delta_t = log1p(delta_t),
-      
       medication_burden = glp1 + insulin + metformin + sglt2 + sulfonylurea + dpp4,
       on_insulin = ifelse(insulin > 0, 1, 0),
       on_metformin = ifelse(metformin > 0, 1, 0),
@@ -363,9 +338,7 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
       on_sulfonylurea = ifelse(sulfonylurea > 0, 1, 0),
       on_dpp4 = ifelse(dpp4 > 0, 1, 0),
       on_glp1 = ifelse(glp1 > 0, 1, 0),
-      
       adi_discrepancy = adi_nation - adi_state,
-      
       recent_ldl = as.numeric(lab_age_ldl <= 180),
       recent_hdl = as.numeric(lab_age_hdl <= 180),
       recent_chol = as.numeric(lab_age_chol <= 180),
@@ -373,7 +346,7 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
       recent_height = as.numeric(lab_age_height <= 365)
     ) %>%
     select(-state_start, -state_end, -end_var, -months_elapsed)
-  
+
   #####################################
   # Continuous features to scale
   #####################################
@@ -392,18 +365,18 @@ create_state_transitions <- function(dat, scaler_tbl = NULL, fit_scaler_flag = F
     "ed_visit_rate", "pcp_visit_rate", "admission_rate",
     "medication_burden"
   )
-  
+
   continuous_features <- intersect(continuous_features, names(out))
-  
+
   out <- sanitize_df(out)
-  
+
   if (fit_scaler_flag) {
     scaler_tbl <- fit_scaler(out, continuous_features)
   }
-  
+
   out <- apply_scaler(out, scaler_tbl)
   out <- sanitize_df(out)
-  
+
   list(
     data = out,
     scaler = scaler_tbl
@@ -452,8 +425,8 @@ feature_cols <- setdiff(
 # Sanitize feature matrices before Torch
 ############################
 X_train <- as.matrix(train_states[, feature_cols])
-X_val   <- as.matrix(val_states[, feature_cols])
-X_test  <- as.matrix(test_states[, feature_cols])
+X_val <- as.matrix(val_states[, feature_cols])
+X_test <- as.matrix(test_states[, feature_cols])
 
 X_train[!is.finite(X_train)] <- 0
 X_val[!is.finite(X_val)] <- 0
@@ -494,11 +467,10 @@ transition_two_head_mlp <- nn_module(
       nn_relu(),
       nn_dropout(p = dropout)
     )
-    
+
     self$head_from_low <- nn_linear(hidden_dim, 1)
     self$head_from_high <- nn_linear(hidden_dim, 1)
   },
-  
   forward = function(x, start_state) {
     z <- self$shared(x)
     logit_low <- self$head_from_low(z)
@@ -612,39 +584,39 @@ loss_curve <- numeric(epochs)
 
 for (epoch in 1:epochs) {
   model$train()
-  
+
   shared_z <- model$shared(x_tensor)
   logit_low_all <- model$head_from_low(shared_z)
   logit_high_all <- model$head_from_high(shared_z)
-  
+
   raw_loss_low <- loss_fn_low(logit_low_all, y_tensor)
   raw_loss_high <- loss_fn_high(logit_high_all, y_tensor)
-  
+
   raw_loss_low <- torch_safe(raw_loss_low, replace_val = 0)
   raw_loss_high <- torch_safe(raw_loss_high, replace_val = 0)
-  
+
   low_weighted <- raw_loss_low * low_mask * row_weight_tensor
   high_weighted <- raw_loss_high * high_mask * row_weight_tensor
-  
+
   low_denom <- (low_mask * row_weight_tensor)$sum()
   high_denom <- (high_mask * row_weight_tensor)$sum()
-  
+
   low_denom <- torch_clamp(low_denom, min = 1)
   high_denom <- torch_clamp(high_denom, min = 1)
-  
+
   loss_low <- low_weighted$sum() / low_denom
   loss_high <- high_weighted$sum() / high_denom
-  
+
   loss <- 0.5 * loss_low + 0.5 * loss_high
   loss <- torch_safe(loss, replace_val = 0)
-  
+
   optimizer$zero_grad()
   loss$backward()
   nn_utils_clip_grad_norm_(model$parameters, max_norm = 5)
   optimizer$step()
-  
+
   loss_curve[epoch] <- as.numeric(loss$item())
-  
+
   if (epoch %% 10 == 0) {
     cat(sprintf(
       "Epoch %3d | Total %.6f | Low %.6f | High %.6f\n",
@@ -658,41 +630,41 @@ for (epoch in 1:epochs) {
 
 # for (epoch in 1:epochs) {
 #   model$train()
-#   
+#
 #   shared_z <- model$shared(x_tensor)
 #   logit_low_all <- model$head_from_low(shared_z)
 #   logit_high_all <- model$head_from_high(shared_z)
-#   
+#
 #   raw_loss_low <- loss_fn_low(logit_low_all, y_tensor)
 #   raw_loss_high <- loss_fn_high(logit_high_all, y_tensor)
-#   
+#
 #   raw_loss_low <- torch_nan_to_num(raw_loss_low, nan = 0, posinf = 1e6, neginf = 1e6)
 #   raw_loss_high <- torch_nan_to_num(raw_loss_high, nan = 0, posinf = 1e6, neginf = 1e6)
-#   
+#
 #   low_weighted <- raw_loss_low * low_mask * row_weight_tensor
 #   high_weighted <- raw_loss_high * high_mask * row_weight_tensor
-#   
+#
 #   low_denom <- (low_mask * row_weight_tensor)$sum()
 #   high_denom <- (high_mask * row_weight_tensor)$sum()
-#   
+#
 #   low_denom <- torch_clamp(low_denom, min = 1)
 #   high_denom <- torch_clamp(high_denom, min = 1)
-#   
+#
 #   loss_low <- low_weighted$sum() / low_denom
 #   loss_high <- high_weighted$sum() / high_denom
-#   
+#
 #   loss <- 0.5 * loss_low + 0.5 * loss_high
 #   loss <- torch_nan_to_num(loss, nan = 0, posinf = 1e6, neginf = 1e6)
-#   
+#
 #   optimizer$zero_grad()
 #   loss$backward()
-#   
+#
 #   nn_utils_clip_grad_norm_(model$parameters, max_norm = 5)
-#   
+#
 #   optimizer$step()
-#   
+#
 #   loss_curve[epoch] <- as.numeric(loss$item())
-#   
+#
 #   if (epoch %% 10 == 0) {
 #     cat(sprintf(
 #       "Epoch %3d | Total %.6f | Low %.6f | High %.6f\n",
