@@ -249,3 +249,36 @@ Expands on hand-written idea (ii) above. Currently we split by subject — train
 Implemented as `scripts/subrata_nn_timesplit.R`. Val patient F1 = **58.0%** (vs 61.0% subject-split). The 28k additional intermediate transitions diluted the signal. Intermediate transitions (between regular visits, short gaps) are genuinely different from target transitions (last reading → 2025 eval, potentially years apart). The model learned "what happens between visits" even harder, but that doesn't help predict "what happens by 2025 after treatment."
 
 This also confirms Fix 2's failure — intermediate and target transitions are fundamentally different tasks. The competition question isn't about short-term dynamics, it's about long-term treatment outcomes. The GLM's patient-level summary features (EWMA, volatility, regime fractions) capture trajectory information more effectively than modeling individual transitions.
+
+---
+
+## Apr 5, 2026 — Residual analysis & non-linear approaches
+
+### Residual analysis results (`scripts/subrata_residual_analysis.R`)
+
+**a1c_weighted alone: Val F1 = 61.25%.** Full 74-feature XGBoost: 62.2%. One feature captures 99% of the achievable signal.
+
+Key findings from Stage 1 residuals (y - P(Y=1 | a1c_weighted)):
+
+1. **The sigmoid is systematically biased.** Overpredicts at low A1c (<7: actual 2-6%, predicted 5-10%), underpredicts at high A1c (7-8: actual 25.2%, predicted 19.4%; >=8: actual 60.1%, predicted 55.6%). The real curve is more step-like. → Isotonic regression or GAM with flexible shape.
+
+2. **Non-linear signal exists in residuals.** `a1c_x_ndrug` (AIC +62.4), `slope_above_8` (AIC +34.4) show strong non-linearity beyond what a linear additive model captures.
+
+3. **Massive interactions with a1c_weighted.** `frac_above_8 × a1c_weighted` (LR=515), `high8_insulin × a1c_weighted` (LR=302), `a1c_x_ndrug × a1c_weighted` (LR=274). Treatment features behave differently at different A1c levels — clinically obvious but the additive GLM misses it entirely.
+
+4. **Stage 1+2 GLM with 38 significant features: Val F1 = 61.07% — WORSE than a1c_weighted alone.** Too many features, overfitting the residual. Need a focused model with 3-5 features + non-linearity, not 38 linear terms.
+
+### Approaches to try
+
+- **Isotonic regression** on a1c_weighted → non-parametric monotone step function, fixes sigmoid bias
+- **GAM with s(a1c_weighted, k=10)** → flexible shape + can add smooth interactions
+- **Focused residual model**: a1c_weighted + only top 3-5 features + explicit interaction (frac_above_8 × a1c_weighted)
+- Manual non-linear feature engineering rather than dumping to XGBoost
+
+### Non-returned patients (~1/3 of all patients)
+
+About 1/3 of patients have no A1c 2025 measurement (they didn't return for follow-up). Their labels are known: all "controlled" (no uncontrolled measurement). In the test set, these patients will also have known labels.
+
+**Semi-supervised angle (Subhrajyoti's idea):** These known-label patients could be leveraged during training — even though competition scoring is on returned patients only, incorporating the non-returned patients as guaranteed negatives could help calibrate the decision boundary. This is analogous to semi-supervised learning where we have labeled and pseudo-labeled data. Currently our models DO train on all patients (including non-returned as negatives), but a more deliberate approach might weight them differently or use them for regularization.
+
+**F1 impact:** When predicting on the full test set (including non-returned), the non-returned patients are trivially correct predictions. If competition scoring includes them, our effective F1 improves because precision goes up (fewer false positives among the easily-classified non-returned). Even if scored on returned only, knowing which test patients are non-returned lets us avoid false positives there entirely.

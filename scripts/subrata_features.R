@@ -218,7 +218,14 @@ create_features <- function(train_dat) {
                 raw <- value_weight / ((value_height / 100)^2)
                 if_else(!is.na(raw) & raw >= 10 & raw <= 80, raw, NA_real_)
             },
-            bmi_x_male = if_else(!is.na(bmi), bmi * gender_male, NA_real_)
+            bmi_x_male = if_else(!is.na(bmi), bmi * gender_male, NA_real_),
+
+            # Rate-normalized counts: count / observation window (per year)
+            # Separates treatment intensity from observation duration
+            obs_years = pmax(time_latest_a1c, 1) / 365.25,
+            insulin_rate = insulin / obs_years,
+            total_meds_rate = total_meds / obs_years,
+            visits_rate = (ed_visits + pcp_visits + admissions) / obs_years
 
             # Derived lipid/log features (tested Apr 5 — hurt GLM/XGBoost, only helped glmnet)
             # Kept commented; uncomment for glmnet-specific runs
@@ -288,7 +295,8 @@ impute_and_flag <- function(df) {
         "a1c_change", "a1c_per_drug",
         "improving_on_meds", "worsening_on_meds", "stable_on_meds",
         "on_modern_drugs", "n_a1c_x_ndrug",
-        "bmi", "bmi_x_male"
+        "bmi", "bmi_x_male",
+        "insulin_rate", "total_meds_rate", "visits_rate"
         # "non_hdl", "ldl_hdl_ratio",
         # "adi_discrepancy",
         # "log_ed_visits", "log_pcp_visits", "log_admissions", "log_total_meds"

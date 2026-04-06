@@ -51,7 +51,8 @@ f_glm <- target ~
     slope_above_7_miss + slope_below_7_miss +
     slope_above_8_miss + slope_below_8_miss +
     post_drop_drift_miss +
-    bmi + bmi_x_male + bmi_miss
+    bmi + bmi_x_male + bmi_miss +
+    insulin_rate + total_meds_rate + visits_rate
     # non_hdl + ldl_hdl_ratio + non_hdl_miss + ldl_hdl_ratio_miss +
     # adi_discrepancy +
     # log_ed_visits + log_pcp_visits + log_admissions + log_total_meds
@@ -136,7 +137,8 @@ feat_cols <- c(
     "a1c_x_meds", "a1c_x_ndrug",
     "a1c_per_drug", "improving_on_meds", "worsening_on_meds",
     "stable_on_meds", "on_modern_drugs", "n_a1c_x_ndrug",
-    "bmi", "bmi_x_male"
+    "bmi", "bmi_x_male",
+    "insulin_rate", "total_meds_rate", "visits_rate"
     # "non_hdl", "ldl_hdl_ratio",
     # "adi_discrepancy",
     # "log_ed_visits", "log_pcp_visits", "log_admissions", "log_total_meds"
