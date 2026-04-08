@@ -497,3 +497,7 @@ The analysis reveals three layers of A1c variation:
 3. **Within-patient temporal (2%):** Structured treatment dynamics (negative ACF, oscillation). Too weak to improve prediction, but explains WHY trajectory features add so little.
 
 The ceiling is set by between-patient variation: once you know a patient's "typical A1c level" (a1c_weighted), the within-patient dynamics (7.6% of variance) can only move the needle by at most ~1-2% F1. This is consistent with what we observe: a1c_weighted alone = 61.4%, best model = 63%, maximum possible = ~65%.
+
+### Apr 6, 2026 (late) — Subhrajyoty full-data XGBoost
+
+- **Subhrajyoty: XGBoost trained on whole current data = 67% F1** (same XGBoost parameters). New best overall.
