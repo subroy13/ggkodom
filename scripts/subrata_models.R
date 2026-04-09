@@ -148,12 +148,25 @@ dt_formula <- as.formula(paste("target ~", paste(feat_cols, collapse = " + ")))
 
 # ---------------
 # Model: Decision tree
-# F1 Score: ~ 60-61%
+# Original config (cp=0.005) collapsed to a single root after the dual-threshold
+# / BMI / rate features were added, producing degenerate "predict all positive"
+# (val F1 = 31.5%, base-rate ceiling). Two changes to break the degeneracy:
+#   (1) lower cp from 0.005 to 0.001 so a 0.5% lack-of-fit improvement is no
+#       longer required to split (the global signal is mostly carried by
+#       a1c_weighted, which is a small Gini drop relative to total deviance);
+#   (2) add a loss matrix penalising FN at 4x FP, so the imbalanced minority
+#       class gets aggressive enough splits at the leaves.
+# Old config kept commented out for reference (per "comment, don't delete").
 
 cat("\n------ Decision Tree (rpart) ---------\n")
+# m1 <- rpart(dt_formula,
+#     data = df_train_imputed, method = "class",
+#     control = rpart.control(cp = 0.005, maxdepth = 6, minsplit = 50)
+# )
 m1 <- rpart(dt_formula,
     data = df_train_imputed, method = "class",
-    control = rpart.control(cp = 0.005, maxdepth = 6, minsplit = 50)
+    parms = list(loss = matrix(c(0, 1, 4, 0), nrow = 2)),  # FN = 4 * FP
+    control = rpart.control(cp = 0.001, maxdepth = 6, minsplit = 100)
 )
 
 p1_tr <- predict(m1, df_train_imputed, type = "prob")[, "Uncontrolled"]
@@ -193,6 +206,28 @@ p1_thresh
 
 p1_val <- predict(rf_model, df_val_imputed, type = "response")$predictions[, "Uncontrolled"]
 compute_metrics(p1_val > p1_thresh["best_th"], df_val_imputed$target == "Uncontrolled", df_val_imputed$mask)
+
+
+# === RF AUDIT — Subrata 2026-04-07 ===
+# Subhrajyoti's swap above leaves df_train_imputed = original VAL,
+# df_val_imputed = original TRAIN. So `p1_tr` (named misleadingly) is
+# already RF predictions on the original VAL set, and `p1_val` is on the
+# original TRAIN set. The compute_metrics line above therefore reports
+# train F1 with a val-tuned threshold. The two clean numbers we actually
+# want for the submission decision:
+
+val_clean   <- df_train_imputed   # alias for clarity (was original val)
+train_clean <- df_val_imputed     # alias for clarity (was original train)
+
+cat("\n--- RF audit (1): val F1, val-tuned threshold (data-leaking, optimistic) ---\n")
+compute_metrics(p1_tr > p1_thresh["best_th"], val_clean$target == "Uncontrolled", val_clean$mask)
+
+cat("\n--- RF audit (2): val F1, train-tuned threshold (clean, what the submission should use) ---\n")
+p_rf_train_clean  <- predict(rf_model, train_clean, type = "response")$predictions[, "Uncontrolled"]
+p_rf_train_thresh <- best_f1_threshold(p_rf_train_clean, train_clean$target == "Uncontrolled", train_clean$mask)
+cat("RF train-tuned threshold: ", p_rf_train_thresh["best_th"], "\n")
+compute_metrics(p1_tr > p_rf_train_thresh["best_th"], val_clean$target == "Uncontrolled", val_clean$mask)
+# === end RF AUDIT ===
 
 
 # -------------
