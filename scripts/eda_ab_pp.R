@@ -1,3 +1,48 @@
+library(dplyr)
+library(tidyr)
+library(patchwork)
+library(ggplot2)
+library(MetBrewer)
+
+train_dat <- readRDS("./data/processed/cleaned_dat.Rds")
+
+measurements <- train_dat$measurements
+
+# prepare A1C flags (your existing code)
+a1c_flags <- measurements %>%
+  filter(variable %in% paste0("a1c_", 1:5)) %>%
+  mutate(visit = as.integer(str_extract(variable, "(?<=_)\\d+"))) %>%
+  group_by(id) %>%
+  arrange(time, .by_group = TRUE) %>%
+  mutate(
+    above_8 = if_else(!is.na(value) & value > 8, 1L, 0L, missing = NA),
+    next_time = lead(time),
+    next_value = lead(value),
+    diff_value = if_else(!is.na(value) & !is.na(next_value), next_value - value, NA_real_),
+    diff_time = if_else(!is.na(time) & !is.na(next_time), next_time - time, NA_real_),
+    diff_value_per_time = if_else(!is.na(diff_value) & diff_time > 0, diff_value / diff_time, NA_real_)
+  ) %>%
+  ungroup() %>%
+  left_join(train_dat$basic %>% select(id, gender), by = "id") %>%
+  filter(gender %in% c("M", "F")) %>%
+  mutate(
+    slope_plot = diff_value_per_time
+  )
+
+a1c_2025 <- measurements %>%
+  filter(variable == "a1c_2025") %>%
+  mutate(a1c_2025 = as.integer(value)) %>%
+  filter(a1c_2025 %in% c(0, 1)) %>%
+  select(id, a1c_2025)
+
+a1c_flags <- a1c_flags %>%
+  left_join(a1c_2025, by = "id") %>% 
+  left_join(
+    train_dat$basic %>% select(id, age),
+    by = "id"
+  )
+
+
 density_age_overlay <- function(a1c_flags, control_val) {
   
   plot_dat <- a1c_flags %>%
@@ -81,7 +126,7 @@ density_age_overlay <- function(a1c_flags, control_val) {
     
     scale_y_continuous(labels = function(x) abs(x)) +
     xlim(-0.035, 0.035) +
-    
+    ylim(-120, 120) +
     theme_bw() +
     labs(
       x = "",
@@ -112,13 +157,3 @@ density_age_overlay <- function(a1c_flags, control_val) {
 density_age_overlay(a1c_flags, 1)
 density_age_overlay(a1c_flags, 0)
 
-
-# theme(
-#   panel.grid.major = element_blank(),
-#   panel.grid.minor = element_blank(),
-#    
-#                              hjust = 2.25, vjust = 0.775),
-#   axis.text.x = element_text(size = 18, face = "bold"),
-#   
-#   legend.position = leg_pos
-# ) 
