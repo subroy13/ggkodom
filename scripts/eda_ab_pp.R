@@ -154,6 +154,7 @@ density_age_overlay <- function(a1c_flags, control_val) {
   )
 }
 
+
 density_age_overlay(a1c_flags, 1)
 density_age_overlay(a1c_flags, 0)
 
