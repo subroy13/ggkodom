@@ -1,7 +1,29 @@
 # Continuous-Time Analysis of A1c Dynamics
 
-**Date:** April 6, 2026  
+**Date:** April 6, 2026 (updated 2026-04-08 with clinical translations)
 **Scripts:** `scripts/subrata_continuous_time.R`, `scripts/subrata_multiscale_acf.R`, `scripts/subrata_lmer_exploration.R`
+
+---
+
+## Clinical translations (for the medical-audience slide deck)
+
+The rest of this document is statistical. For the presentation, each finding has a clinical-English translation the slide team should use instead of the raw number. Keep these strings consistent across slides and rehearsal — they are the language the judges will hear.
+
+| Technical finding | Clinical sentence to use on the slide / in the talk |
+|---|---|
+| ICC = 0.924 (between-patient variance dominates) | "Each patient has their own typical A1c level. Once you know it, month-to-month fluctuation barely matters for predicting 2025." |
+| CTMC relaxation time ≈ 8 months | "An A1c reading is 'fresh' for roughly 8 months. After that, it's barely more informative than the population average." |
+| CTMC: P(H\|H, 1 yr) = 34.9%, P(H\|H, 2 yr) = 20.3%, π_H = 16% | "If a patient is uncontrolled today, the probability they're still uncontrolled one year from now is about 35%. Two years from now, it's 20% — nearly the population rate of 16%. The last reading fades toward the average." |
+| Within-patient ACF is negative | "Treatment works but overshoots. When A1c crosses above 7, the next reading usually comes back below baseline, then drifts up again — the rhythm of treatment and relapse." |
+| q_HL / q_LH = 5.2 (treatment 5× faster than deterioration) | "Good news: diabetes treatment, when applied, works about five times faster than the disease progresses. The problem is predicting *when* treatment is applied." |
+| Multi-scale variogram, 73% nugget | "Most of a patient's visit-to-visit variation is noise — measurement error, day-to-day fluctuation, and acute treatment effects. Only about a quarter of it has a predictable temporal structure." |
+| Raw correlation positive, within-patient negative (Simpson's paradox) | "If you look at the raw data, A1c readings look stable from visit to visit. But once you correct for each patient's own baseline, you see the oscillation — the stability was an illusion driven by the fact that sick patients stay sick." |
+
+**The single clinical sentence to open Slide 5 with:**
+> "An A1c reading stays useful for about eight months. That's the same interval as the ADA's recommended monitoring cadence, which turns out not to be a coincidence."
+
+**The single clinical sentence that ties Slide 4 to Slide 5:**
+> "Our model's #1 feature was 'days since the last A1c reading' — not because time itself matters, but because the information in that reading expires."
 
 ---
 

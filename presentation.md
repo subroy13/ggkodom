@@ -1,174 +1,260 @@
-# Presentation outline & storyline
+# Presentation — medical-audience version
 
-Working draft of the slide structure for the WashU I2DB Datathon 2026 final presentation. Goal: tell the story of what we did, what we found, and what's actually impressive about it. Three-act structure with the "Fault in Our X" pun.
-
----
-
-## Subhrajyoti's original proposal (for reference)
-
-### Act 1: The fault in our data
-- **Slide 1**: Describe the data, show missingness, emphasize that people don't visit, and sometimes things are not measured properly → so need some cleaning.
-- **Slide 2**: Describe the EDA plot (violin plot) of (change rate of a1c) conditional on whether the current a1c value > 8 or < 8. Explain that < 8 patients are equally likely to improve or not.
-
-### Act 2: The fault in our models
-- **Slide 3**: We started with simple models (say GLM with median imputation) → gave F1 score of 58%. Added relevant features → improved to 60%. Tried more complex models (Random Forest, Decision Tree) → stuck at 60% → we were hunting for more precision.
-- **Slide 4**: Designed 2-state transition model: each transition probability modelled by NN → maybe NN will help us select relevant features (but not so interpretable) → look at hidden state values → show some plot of hidden state values vs `a1c_latest`, over interactions (some simple plots that diagnose what kind of features NN is making). Or maybe show some Shapley-value kind of thing (we can actually calc Shapley values for XGBoost model instead of NN).
-- **Slide 5**: Found a set of optimal features. Used XGBoost (because of imbalanced data, need boosting to low-prob class).
-
-### Act 3: The fault in our health
-- **Slide 6**: Show important features identified by XGBoost. Explain why they might be relevant.
-- **Slide 7**: Discuss where modelling falls short. What more data may be insightful. What additional health data can be collected in EHR to improve analysis (e.g., number of different meds taken between each successive visits).
+**Status (2026-04-13):** Presentation delivered. At least 3 audience questions during Q&A, positive feedback from 2+ attendees and 1 organizer. Deck submitted 2026-04-09; presented ~Apr 10–13 window.
 
 ---
 
-## What's good about this structure
+## Framing rules (what we assume about the audience)
 
-- **3-act structure mirrors the natural data-science narrative.** Data → models → interpretation. Easy to follow.
-- **Slide 2 (AB's conditional A1c slope EDA)** is a *great* opener for "here's what makes this hard". One plot that tells the story — the asymmetry between high and low patients is non-obvious and clinically meaningful.
-- **Slide 6 (XGBoost feature importance + clinical interpretation)** is the right closer for the modeling section.
-- **Slide 7 (what data we'd want)** is the strongest version of the "fault in our health" pun and the hardest for judges to dismiss.
+The audience is physicians, nurses, EHR-aware clinical researchers — people who think in terms of individual patients, treatment decisions, labs, appointments, and medication burden. They are NOT statisticians.
 
----
+**Terms that must NOT appear on a slide or in the talk:**
+- ICC / variance decomposition / autocorrelation / ACF
+- CTMC / Markov chain / Ornstein-Uhlenbeck / Gaussian process
+- BLUP / mixed model / lmer / GEE
+- Polya-Gamma / Bayesian vs frequentist
+- F1 score / precision / recall / calibration / Brier / log-loss / ECE
+- "paradigm convergence" / "six models"
+- "ceiling" (unless immediately followed by a clinical explanation)
+- "glycemic index" (food-based concept, not what we mean)
+- "phenotype" (genetics connotation — say "baseline disease severity" instead)
 
-## Concerns
+**Clinical translations:**
 
-### Concern 1 — Slide 3 underclaims our work and overclaims the difficulty
-
-> "Started with simple GLM (58%) → added features (60%) → tried RF/Tree (stuck at 60%) → were hunting for more precision"
-
-This **doesn't match the actual numbers**:
-- Subhrajyoti's true baseline (latest A1c > 7) is ~55%, not 58%.
-- After Subrata's 50 hand-engineered features, GLM hit 60%, glmnet 61.7%, GAM 62%, **XGBoost 62.3%** — already on Day 1 (Mar 27).
-- After dual-thresholds + BMI + rate features + class weighting, GLM hit 61.9%, ensemble 62.0%, XGBoost regularized 62.2%.
-- We were never "stuck at 60%" — we hit 62% on Day 1 and have been there since.
-
-The honest progression is **55% → 60% → 62%**, with the second jump coming from feature engineering and the ceiling at 62% being structural, not "we ran out of ideas". If the slide says "stuck at 60%", a sharp judge will look at the leaderboard, see XGBoost at 62%, and think we're under-reporting our own work.
-
-**Suggested rewrite for Slide 3:**
-
-> "Baseline (latest A1c > 7) → 55%. 50 hand-engineered features → 60%. Dual-threshold + BMI + rate features + class weighting → 62%. Then **four model classes (GLM, RF, GAM, XGBoost) all converged within 0.5 pp of each other.** That convergence was the first hint the ceiling was structural."
-
-### Concern 2 — Slide 4 (transition NN with hidden state interpretability) is a misallocation of slide budget
-
-The multi-head NN got **61.0% F1** — *below* the GLM and Bayesian. The pitch "NN helped us select features for XGBoost" is post-hoc rationalization. XGBoost has its own feature importance, and the features the NN suggests are essentially the same ones we already had from MI/correlation analysis on Day 1.
-
-If you're going to spend a slide on interpretability of black-box models, **Shapley values on XGBoost are strictly better than hidden-state diagnostics on a model that underperforms by 1 pp.** Subhrajyoti even hedges this in his note ("Or maybe show some Shapley-value kind of thing...").
-
-**Two cleaner options for Slide 4:**
-
-- **(a) Drop the NN entirely.** Replace with a slide on the **interpretable Bayesian / PG / GLM ceiling-tying triumvirate** (see "Things to add" below). Three principled interpretable models hitting the same ceiling as XGBoost — much stronger story than one underperforming NN.
-- **(b) Keep the NN but reframe it.** "We tried a multi-head transition NN to see if dynamics gave us anything beyond the GLM. We got 61% — below GLM. **The NN has the same ceiling.** This was the second hint that the ceiling is structural, not modeling-limited."
-
-**Recommendation: option (a).** The NN was useful for *us* methodologically (we learned about transition models, found an ID-mismatch bug, etc.) but it's not a presentation-strong result.
-
-### Concern 3 — Missing the structural ceiling slide
-
-Subhrajyoti's structure jumps from "we tried things" (Slide 5) to "feature importance" (Slide 6) without ever asking *why the ceiling exists*. This is the deepest part of our work and judges who've seen many datathon presentations will be looking for it.
-
-We have **three independent statistical analyses** that all explain the ceiling:
-- **ICC = 0.924** — variance decomposition: 92.4% between patients, 7.6% within. No within-patient method can beat ~62%.
-- **CTMC relaxation time = 8 months** — after 8 months, current state is uninformative → most patients have time_gap > 8 months → predictions revert to base rate.
-- **Within-patient ACF is *negative*** — treatment-induced oscillation. AR/OU/GP/lmer/GEE all structurally wrong for within-patient dynamics. But it doesn't matter because within-patient is only 7.6% of total variance.
-
-**Three completely different methods converging on the same conclusion.** A single slide showing all three side by side would be the strongest technical-merit slide in the deck.
+| Statistical term | Clinical translation |
+|---|---|
+| ICC = 0.924 | "Each patient has their own typical A1c level. Once you know it, month-to-month fluctuations barely matter for predicting 2025." |
+| CTMC relaxation = 8 months | "An A1c reading stays 'fresh' for about 8 months. After that, it's barely more informative than the population average." |
+| Within-patient ACF is negative | "Treatment works but overshoots — after crossing above 7, the next reading usually comes back down below baseline, then drifts up again." |
+| Six paradigms converge | "We tried several very different modeling approaches. They all land in the same place. That tells us it's the information, not the method." |
+| `days_to_eval` was a confound | "One of our features looked important but was actually measuring study duration, not anything clinical. Once removed, the model stayed the same." |
 
 ---
 
-## Things to add (concrete)
+## The story (three beats)
 
-### NEW Slide 3.5 — "Why we suspected the ceiling was structural"
+### Beat 1 — The data reflects clinical practice
+Patient trajectories look exactly like what you'd expect: when A1c goes above 7, the next reading usually comes down (intervention); when it's below 7, it drifts either way. The data *behaves* the way diabetes care actually works.
 
-Three panels side by side:
-1. **Variance decomposition pie chart** showing 92.4% between-patient, 7.6% within-patient. Caption: "ICC = 0.924 — patient identity dominates."
-2. **CTMC transition probability plot** P(H | last state, Δt) decaying exponentially. Caption: "Relaxation time = 8 months. After that, the last reading is uninformative."
-3. **Within-patient ACF plot** showing negative correlation at all lags. Caption: "Treatment creates oscillation, not persistence. Standard time-series models are structurally wrong here."
+### Beat 2 — What actually drives the prediction
+Our presentation model ("SLIM NEW") uses 28 clinically interpretable features, all built around a single threshold — the competition definition of uncontrolled, A1c > 8. The three most important are:
+1. **Time since the last A1c reading** (36% of the model's "attention")
+2. **The weighted average of all past A1c readings** (20%)
+3. **The most recent A1c reading** (8%)
 
-One sentence below the panels: "Three independent analyses, three completely different methods, same answer: between-patient variance dominates; trajectory dynamics are bounded to ~7.6% of variance."
+That's 64% of the model's decision-making in three features. The #1 feature is not a lab value — it's *data freshness*.
 
-### NEW Slide 4 (replacing the NN slide) — "Three interpretable models, three paradigms, same ceiling"
+### Beat 3 — Where the model fails, and why
+We plateau at ~62% accuracy on the uncontrolled class. The errors split into two clinically meaningful groups:
+- **"Silent deteriorators"** — patients who looked controlled at their last visit and got worse by 2025.
+- **"Treatment responders"** — patients with high A1c at last visit whose doctor intervened and brought them under control by 2025.
 
-Table:
-
-| Method | Paradigm | Val F1 | What it explains |
-|---|---|---:|---|
-| Bayesian state-space | Longitudinal generative | **0.6161** | treatment dynamics, patient heterogeneity |
-| PG logistic + missing-data Gibbs | Cross-sectional Bayesian | 0.6094 | proper missing-data handling, **best calibration in project** |
-| GLM on a1c_weighted alone | Frequentist, 1 feature | 0.6140 | the simplest possible interpretable baseline |
-| **Reference: XGBoost (74 features, black-box)** | **Gradient boosting** | **0.6200** | — |
-
-One sentence: "We built three principled interpretable models from completely different statistical traditions. All match XGBoost within 1 pp. **The ceiling is the data, not the method.**"
-
-If room: a **coefficient table for the Bayesian** (5 interpretable parameters with clinical names — `δ` = treatment drop in A1c units, `prec_µ` = patient-specific variance per day, `µ_pop` = population A1c mean, etc.). This is what makes "interpretable" concrete.
-
-### Add to Slide 6 — "F1 vs calibration"
-
-Calibration plot: PG logistic (near-perfect, ECE = 0.033) vs the simpler GLM. They have nearly the same F1 but very different probability quality.
-
-One sentence: "F1 depends on rank ordering, not on probability calibration. Adding longitudinal dynamics dropped log-loss from 0.45 to 0.35 — the dynamics are real, but F1 is blind to them. **The metric is wrong for what's actually informative in this data.**"
-
-This is a publication-quality observation. Most teams will not have made it.
-
-### Add to Slide 7 — explicit synthetic-data caveat
-
-One sentence at the end:
-
-> "The data is synthetic. The 'ceiling' we observe at 62% may be the simulator's irreducible noise floor, OR it may be a designed competition floor with a hidden 65%+ ceiling we haven't found. Without ground truth, we can't disentangle these. We're confident the ceiling exists; we're appropriately uncertain about *where exactly* it is."
-
-This is **disarming honesty** that judges respect. It also pre-empts the "did you really hit the ceiling?" challenge.
+**Both groups require information that isn't in the EHR.** If you want a better model, the lever is the data, not the algorithm.
 
 ---
 
-## Things I'd cut or shrink
+## Slide structure (10 slides, ~7 min)
 
-- **The NN as a feature-selection step for XGBoost.** Post-hoc rationalization, weak.
-- **Anything implying "the ceiling is set by unobserved data"** without also acknowledging the synthetic-data caveat. Real EHR data has unobservable adherence/lifestyle/timing; synthetic data has whatever the simulator decided to expose. Mixing the two is sloppy.
+**Submitted 2026-04-09.** Current deck: `present_slides/I2DB ppt.pdf`.
+
+| # | Slide title | Content | Time | Status |
+|---|---|---|---:|---|
+| 1 | Title | Team SASS + title (no subtitle) | 0:15 | ✅ done |
+| 2 | Landscape of the Dataset: Challenges and Patterns | 6-panel kadam ful trajectories by age × sex | 0:45 | ✅ done |
+| 3 | Distribution of Change Rate in A1c Measurements | Violin plot: A1c gradient by age group, faceted < 8 vs ≥ 8 (green/orange) | 0:50 | ✅ done (new faceted plot, annotation verbal only) |
+| 4 | Statistical Modelling Framework | 3-column: Models / Missing Data / Imbalanced Data | 0:30 | ✅ done |
+| 5 | 2-state Transition Modeling via Shared Representations | State diagram + NN architecture + logistic equations (kept) | 0:50 | ✅ done (equations kept as depth signal, not narrated) |
+| 6 | Hunting for Features through Data | NN hidden-node heatmap (Spearman correlation) | 0:30 | ✅ done |
+| 7 | Biological Feature Hunting | 8-row feature × description table | 1:00 | ✅ done (final wording 2026-04-09) |
+| 8 | Predictive Power of XGBoost | Feature importance (top 15) + ROC (AUC 0.880) + density plot | 1:30 | ✅ done (footnote: "AUC = 0.938 based on the organizers' test data") |
+| 9 | "All models are wrong" — So What Should We Do? | Left: 4 bullets. Right: "What's not in the charts" with icons | 1:00 | ✅ done |
+| 10 | Questions? | Team photo + contacts | 0:10 | ✅ done |
+
+Total ≈ 6:50. Template pages deleted. **Deck submitted.**
 
 ---
 
-## Net suggested structure
+## Slide-by-slide notes
 
-| Slide | Subhrajyoty's | My suggested |
-|---|---|---|
-| 1 | Data + missingness + cleaning | same |
-| 2 | AB's conditional A1c slope EDA | same |
-| 3 | Simple GLM → features → "stuck at 60%" | **Honest progression: 55% → 60% → 62%, six model classes converged within 1 pp** |
-| **3.5 (NEW)** | — | **"Why we suspected the ceiling was structural" — ICC + CTMC + negative ACF** |
-| 4 | NN transition + hidden state interpretability | **"Three interpretable models, three paradigms, same ceiling" — Bayesian + PG + GLM table** |
-| 5 | Found optimal features → XGBoost | **XGBoost as the leaderboard model + interpretable Bayesian as the alternate headline** |
-| 6 | XGBoost feature importance + clinical | **Same, plus calibration plot showing F1-vs-calibration trade-off** |
-| 7 | Where modeling falls short, what data we'd want | **Same, plus synthetic-data caveat** |
+### Slide 1 — Title (0:15)
 
-7 slides → 8 slides. If 8 is too many, cut Slide 5 (XGBoost can be one paragraph on Slide 4 since the table already includes it).
+- Title: **"Predicting Future Uncontrolled Diabetes from Electronic Health Records"**
+- No subtitle (decided to drop — title stands on its own, opening line of talk does the subtitle's job)
+- Team name SASS — memorable, not disrespectful. Subrata Pal* = presenter.
+
+**Talk:** *"Our task was to predict, using longitudinal patient data, whether each patient's HbA1c would still be uncontrolled — above 8 — in 2025. I'll show you what the data looks like, what actually drives our prediction, and where we hit a wall."*
+
+### Slide 2 — Landscape of the Dataset (0:45)
+
+- ✅ Title updated: "Landscape of the Dataset: Challenges and Patterns"
+- Caption: "x-axis denotes the number of days from the baseline"
+
+**Talk:** Point out the kadam ful shape — each patient has a "typical" A1c they hover around. Some swing across thresholds, some stay flat.
+
+### Slide 3 — Distribution of Change Rate (0:50)
+
+- **Updated figure (2026-04-09):** new faceted violin plot. Left panel: A1c < 8 (green, 3 age groups). Right panel: A1c ≥ 8 (orange, 3 age groups). Much cleaner than the old gender × age version.
+- No on-slide annotation — the contrast speaks for itself. Annotation delivered verbally.
+
+**Talk:** *"Left: below 8, symmetric around zero across all ages — no systematic drift. Right: above 8, wider spread, shifted negative — treatment kicks in. The response is age-invariant. Higher the A1c, more erratic the trajectory."*
+
+### Slide 4 — Statistical Modelling Framework (0:30)
+
+- 3-column layout: Models | Missing Data Handling | Imbalanced Data Handling
+- Models list: GLM, GAM, Decision Tree, SVM, Bayesian Hierarchical, RF, 2-state NN, Boosting
+- This is a "credibility slide" — shows breadth of approaches tried
+
+### Slide 5 — 2-state Transition Modeling (0:50)
+
+- State diagram (Controlled ↔ Uncontrolled) on the left
+- NN architecture flowchart on the right
+- **Logistic equations KEPT** (reversed earlier recommendation, 2026-04-09). Equations stay as a depth signal — shows mathematical rigor for quantitative judges. Don't narrate them during the talk; let them sit as background credibility. If asked: "Standard logistic link, separate heads for each transition direction, shared hidden layer."
+
+**Talk:** *"Treatment response is a transition between two states. These transitions are driven by different dynamics. So we built a neural network that answers two questions separately — one head for each direction — while sharing the hidden representation."*
+
+### Slide 6 — Hunting for Features (0:30)
+
+- NN heatmap: Input Features × Hidden Nodes, Spearman correlation
+- Feature clusters visible on the left (treatment intensity, A1c dynamics, demographics, data completeness)
+
+**Talk:** *"When we looked inside the NN, we found four clean clusters. This is the model showing its work — it gave us the shortlist of features to look at biologically."*
+
+### Slide 7 — Biological Feature Hunting (1:00) — **KEY SLIDE**
+
+**Updated 2026-04-09.** 8-row table, 2 columns (feature name + description with bold keywords). No column headers needed. Biology-first ordering, data/measurement features second.
+
+| Feature | Description |
+|---|---|
+| **A1c summary** (recency-weighted average) | Smooths out the spikes, **weighted toward the present**. |
+| **First A1c reading** | Captures **baseline disease severity**, independent of current treatment. |
+| **Fraction of readings above 8** | How often the patient crosses the uncontrolled threshold: **chronic** uncontrol or **transient** spikes. |
+| **A1c per treatment load** | Treatment-resistant: high means **uncontrolled despite treatment**. |
+| **Days since last A1c** | Long time gap between visits means reading is **outdated**. Consistent with ADA's 3–6 month monitoring recommendation. |
+| **Biggest single-visit worsening** | A sudden jump might suggest a **different clinical story** than a slow drift. |
+| **Drift rate while controlled** | For a patient below uncontrolled threshold, A1c **can increase, stay flat, or decrease** between visits. |
+| **Number of A1c readings** | More readings suggest **unhealthy or more engaged** patient, and more **precise** estimates. |
+
+**Design:** Left column = bold red feature names (~16pt). Right column = description with strategic bold on key words (~14pt). Alternating white/teal rows for readability.
+
+**Caption (optional, below table):** *"Each maps to a distinct clinical mechanism. The model learned what a diabetologist already knows."*
+
+**Omitted from this slide (already on Slide 8 or obvious to audience):**
+- Days since last A1c is #1 on Slide 8 — it's here for completeness but the impact story lives on Slide 8
+- HDL cholesterol — rank 9 on Slide 8, "metabolic syndrome" is obvious to every physician
+- BMI — in the model but below top 15, mention verbally if asked
+
+**Q&A prep — "Why is days since last A1c the most weighted?" (will be asked):**
+*"It's not about the patient's biology — it's about how much we know. A recent A1c is almost ground truth. An A1c from a year ago tells us very little about where the patient is today. The model learned that the strongest predictor of whether it can make a good prediction is whether it has fresh data. That's why we put it in the feature importance table [Slide 8] rather than leading the biological features table [Slide 7] — it's an information quantity signal, not a clinical signal."*
+
+If they push further: *"Our continuous-time analysis showed the decay window is about 8 months — after that, the old reading is barely more informative than the population average."*
+
+### Slide 8 — Predictive Power of XGBoost (1:30) — **CENTERPIECE**
+
+- Left: feature importance table (ranks 1–15, all with bold key words and clinical labels)
+- Top right: ROC curve with AUC = 0.880 and decision threshold gradient
+- Bottom right: predicted probability density (Controlled teal vs Uncontrolled pink)
+- Footnote: "* AUC = 0.938 based on the organizers' test data"
+
+**Verified val metrics (SLIM NEW, 28 features, val split, returned patients only, n = 9056, base rate 18.7%):**
+
+| Metric | Value |
+|---|---:|
+| F1 | 0.619 |
+| AUC | 0.880 |
+| R² (Efron) | 0.339 |
+| R² (McFadden) | 0.336 |
+| R² (Tjur) | 0.337 |
+| Brier | 0.100 |
+
+**AUC (Test) = 0.938 context:** Organizers computed this on their test data. Inflated because Subhrajyoty set P=0 for non-returned patients (~1/3 of test set), which are trivially controlled — free true-negatives that push AUC up. Mention verbally near conclusion: *"The test AUC includes patients who didn't return — those are guaranteed controlled, so the AUC is somewhat generous."*
+
+**Talk:** Focus on the top 3 features (time_gap 35.8%, a1c_weighted 20.4%, a1c_latest 8.4% = 64% of model attention), then the ROC curve ("88% ranking accuracy"), then the density plot ("controlled patients cluster low, uncontrolled spread across the range — the uncertainty lives in borderline patients").
+
+**Q&A sidebars:**
+- R²: "0.34 on val, all three definitions agree within 0.01."
+- AUC-F1 gap: "AUC measures ranking, F1 measures threshold trade-off. With 19% positive class, the threshold is the bottleneck, not the ranking."
+- Insulin per week: intentional scale change from per-year for clinical readability. XGBoost gain is scale-invariant.
+
+### Slide 9 — "All models are wrong" — So What Should We Do? (1:00)
+
+**Updated 2026-04-09.** Two elements:
+
+**Left side:** Two bullets:
+1. "Real EHR data is messy — out-of-order timestamps, some implausible values. We built our pipeline to handle these, because any deployed model would face the same."
+2. "Our models learn what's in the chart, but reaches a systematic ceiling. ***What it misses is what the patient does between visits*** — and that's exactly the information that would make it a decision tool instead of a triage tool."
+
+**Right side:** Single-column table "What's not in the charts" with template icons:
+- 💊 Medication adherence
+- 🍽️ Diet and nutrition
+- 🏃 Physical activities
+- 📅 Treatment timing (start/stop)
+- 💰 Financial and life disruptions
+- 🧠 Mental health and stress
+
+Icons: pill and brain from WashU template, calendar and money from WashU template, nutrition and activity sourced externally (outline style to match).
+
+**Talk:** *"Every error our model makes falls into one of two buckets — a patient who looked fine but deteriorated, or a patient who looked bad but responded to treatment. Both require information from this list."*
+
+**Closing line:** *"Our model is a decent triage tool. What it can't tell you is what the patient does between visits."*
+
+### Slide 10 — Questions? (0:10)
+
+- Team photo (the cooking photo — memorable, humanizing)
+- Names + emails
+- ✅ Done, no changes needed.
+
+---
+
+## Post-submission grammar fixes (minor, for any revision round)
+
+| Slide | Fix |
+|---:|---|
+| 9 | "but **reaches** a systematic ceiling" → "but **reach**" (models is plural) |
+| 7, row 8 | "More readings **suggests**" → "**suggest**" (readings is plural) |
+| 7, row 7 | "For patient below" → "For **a** patient below" (missing article) |
+| 8 footnote | "organizer's" → "organizers'" (plural possessive) |
+
+---
+
+## Q&A preparation
+
+**Expected questions and prepared answers:**
+
+1. **"Why is days since last A1c the most important feature?"** — See Slide 7 Q&A prep above.
+
+2. **"What's the R²?"** — "0.34 on the validation set, with Efron, McFadden, and Tjur definitions all agreeing within 0.01."
+
+3. **"Did you try [specific model]?"** — "Yes, we tried 8 model families including GLM, GAM, SVM, Random Forest, Bayesian hierarchical, and neural networks. They all converge between 60.9% and 62.2% F1. The ceiling is the data, not the method."
+
+4. **"What about the AUC-F1 gap?"** — "AUC measures ranking — the model correctly orders 88% of patient pairs. F1 measures what happens after you pick a threshold. With a 19% positive class, there's a precision-recall trade-off that caps F1 below AUC."
+
+5. **"What about the test AUC of 0.938?"** — "The organizers computed that on their test data. It's somewhat generous because patients who didn't return for a 2025 reading are guaranteed controlled, and our pipeline assigns them probability zero — free true-negatives."
+
+6. **"Why not include [social determinants / BMI / etc.]?"** — "They're in the model — BMI, neighborhood deprivation (ADI), demographics. They contribute, but below the top 10 in importance. A1c history dominates."
+
+7. **"What about the logistic equations on the NN slide?"** — "Standard logistic link, separate heads for each transition direction, shared hidden layer. g₀ handles controlled→uncontrolled transitions, g₁ handles persistence of the uncontrolled state."
 
 ---
 
 ## The sharpest single line for the whole deck
 
-> "We built six different models from three different statistical paradigms. They all hit 62% F1. **Our deepest finding isn't a model — it's that the ceiling is real and we have three independent statistical proofs of why.**"
+> "Our model is a decent triage tool. It tells you who needs a closer look. What it can't tell you is what the patient does between visits — and that's exactly the information that would make it a decision tool."
 
 ---
 
-## Open questions / things to decide
+## Supporting material (verified)
 
-- **Title.** "The Fault in Our \_\_\_" — pick three nouns. "Data / Models / Health" is clean. "Data / Methods / Health" is more honest about scope.
-- **Who presents which act?** Natural assignment: Subhrajyoti (cleaning + Bayesian), Subrata (features + audits + dynamics), Sayan (missing data + PG logistic), AB (NN + EDA). All four contribute.
-- **Demo or static?** If demo: live calibration plot, change of threshold, posterior intervals on a single patient. If static: all of that as figures.
-- **Length.** Datathon presentations are typically 8–12 minutes. 7 slides is tight, 8–9 is comfortable.
-- **What to name the round-2 model?** Currently the submission is the regularized XGBoost from `final_test.R`. Should we also submit the Bayesian as an interpretable alternative if the rules allow multiple submissions?
+- ✅ SLIM NEW 28-feature XGBoost: val F1 = 0.6186, AUC = 0.8800, R² = 0.339, Brier = 0.100
+- ✅ `days_to_eval` confound audit complete
+- ✅ All metrics computed in `scripts/subrata_models_slim.R`
+- ✅ Predictions saved to `data/processed/slim_predictions.Rds`
 
----
+## Evolution of the slide outline
 
-## Status of supporting material (as of 2026-04-08)
-
-- ✅ Cleaning + EDA plots (Subhrajyoti, AB) — exist in `figures/`
-- ✅ Variance decomposition + ICC (Subrata, `subrata_multiscale_acf.R`)
-- ✅ CTMC analysis + plots (Subrata, `subrata_continuous_time.R`)
-- ✅ Within-patient ACF plots (Subrata, `subrata_multiscale_acf.R`)
-- ✅ Bayesian state-space results (Subrata + Subhrajyoti, `subrata_bayesian.R` + `subrata_model.jags`)
-- ✅ PG logistic results (Sayan + Subrata, `subrata_pg_logistic.R`)
-- ✅ Six-model F1 table (compiled in `changes.md` Apr 8 entry)
-- ⚠️ Calibration plot for Slide 6 — **needs to be made**. Eval harness writes calibration tables, but we need a side-by-side reliability diagram of GLM vs Bayesian vs PG logistic. Quick — maybe 30 lines of ggplot.
-- ⚠️ Bayesian coefficient table with clinical names — **needs to be assembled**. We have the posterior summary in the JAGS output, but it needs to be relabeled with clinical interpretations (`δ` → "treatment drop in A1c units", etc.).
-- ⚠️ The "honest progression" plot for Slide 3 — **may need to be made**. Could just be a bar chart of F1 across model classes ordered by feature complexity.
-
-None of the missing material is hard to make — half a day of plotting. Worth doing before the rehearsal so the team can see the deck end-to-end.
+| Revision | Slides | Key change |
+|---|---:|---|
+| Original (`presentation_old.md`) | 7 | Statistics-first |
+| First medical rewrite (2026-04-08) | 6 | Cut NN, CTMC on Slide 5 |
+| Second revision (2026-04-08 night) | 9 | Kept NN, added biological feature hunting |
+| 2026-04-09 (day) | 10 | Added Slide 4 (Statistical Modelling Framework), polished Slide 7 (8-row table with bold keywords), polished Slide 9 (single-column "not in chart" with icons), confirmed all metrics |
+| **Submitted (2026-04-09 night)** | **10** | **Title filled, no subtitle. New faceted violin plot (Slide 3). Equations kept on Slide 5. Slide 7 final wording (treatment-resistant, outdated, etc.). Slide 8 footnote fixed, rank 6 aligned with Slide 7. Template pages deleted. Submitted.** |
