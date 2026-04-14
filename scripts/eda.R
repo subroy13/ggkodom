@@ -176,3 +176,113 @@ table(
     dm_features$`gender at birth`,
     is.na(dm_features$`weight-estimated result`)
 ) # establishes missing data at random
+
+# ----------------
+library(tidyverse)
+
+dat <- readRDS("./data/processed/cleaned_dat.Rds")
+
+transitions <- dat$measurements %>%
+  filter(variable %in% paste0("a1c_", 1:5)) %>%
+  drop_na() %>%
+  arrange(id, variable) %>%
+  group_by(id) %>%
+  mutate(
+    t_start = time,
+    value_start = value,
+    t_end = lead(time, 1),
+    value_end = lead(value, 1)
+  ) %>%
+  ungroup() %>%
+  filter(!is.na(t_end)) %>%
+  mutate(
+    delta_t = t_end - t_start,
+    delta_val = value_end - value_start,
+    state_start = case_when(
+      # value_start < 7 ~ "< 7",
+      value_start >= 8 ~ "Current A1c ≥ 8",
+      TRUE ~ "Current A1c < 8"
+    ),
+    beta = delta_val / delta_t,
+    state_start = factor(
+      state_start,
+      levels = c("Current A1c < 8", "Current A1c ≥ 8")
+    )
+  ) %>%
+  select(id, state_start, delta_t, delta_val, beta)
+
+transitions
+
+# make violin plot
+# Accent, Dark2, Paired, Pastel1, Pastel2, Set1, Set2, Set3
+
+trans2 <- transitions %>%
+  left_join(
+    dat$basic %>% 
+      select(id, age) %>%
+      mutate(
+        age_group = case_when(
+          age < 30 ~ "< 30",
+          age >= 60 ~ "≥ 60",
+          TRUE ~ "30 - 60"
+        ),
+        age_group = factor(age_group, levels = c("< 30", "30 - 60", "≥ 60"))
+      )
+  , by = "id") %>%
+  filter(!is.na(age_group)) 
+
+ggplot(trans2, aes(y = beta, x = age_group, fill = age_group)) +
+  geom_violin(alpha = 0.6) +
+  geom_boxplot(width = 0.2, outlier.shape = NA) +
+  geom_hline(yintercept = 0, color = "black", linetype = "dotdash") +
+  scale_fill_brewer(palette = "Dark2") +
+  ylim(-2/30, 2/30) +
+  # xlab("Baseline A1c group") +
+  xlab("Age group") +
+  ylab(expression(frac(Delta~A1c, Delta~t))) +
+  facet_grid(cols = vars(state_start)) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    strip.text = element_text(size = 14)
+  )
+
+ggsave("./figures/slope_by_age.png", dpi = 300, width = 12, height = 6)
+
+
+trans2 %>%
+  group_by(state_start, age_group) %>%
+  summarise(
+    beta_mean = mean(beta, na.rm = T),
+    beta_med = median(beta, na.rm = T),
+    beta_25 = quantile(beta, probs = 0.25, na.rm = T),
+    beta_75 = quantile(beta, probs = 0.75, na.rm = T)
+  )
+
+
+
+transitions %>%
+  left_join(dat$basic %>% select(id, gender), by = "id") %>%
+  filter(!is.na(gender)) %>%
+  ggplot() +
+  geom_density(aes(x = beta, fill = state_start), alpha = 0.5) +
+  theme_bw() +
+  xlim(-2/30, 2/30) +
+  facet_wrap(~ gender)
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+

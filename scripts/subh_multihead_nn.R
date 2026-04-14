@@ -7,15 +7,15 @@ train_dat <- readRDS("./data/processed/train.Rds")
 val_dat <- readRDS("./data/processed/val.Rds")
 test_dat <- readRDS("./data/processed/test.Rds")
 
-train_dat$measurements %>%
-    filter(variable %in% c("a1c_1", "a1c_2025")) %>%
-    select(id, variable, value) %>%
-    pivot_wider(names_from = variable, values_from = value) %>%
-    ggplot() +
-    geom_density(aes(x = a1c_1, fill = factor(a1c_2025)), alpha = 0.5) +
-    geom_vline(xintercept = 8, color = "red", linetype = "dashed") +
-    geom_vline(xintercept = 6.75, color = "black", linetype = "dashed") +
-    theme_bw()
+# train_dat$measurements %>%
+#     filter(variable %in% c("a1c_1", "a1c_2025")) %>%
+#     select(id, variable, value) %>%
+#     pivot_wider(names_from = variable, values_from = value) %>%
+#     ggplot() +
+#     geom_density(aes(x = a1c_1, fill = factor(a1c_2025)), alpha = 0.5) +
+#     geom_vline(xintercept = 8, color = "red", linetype = "dashed") +
+#     geom_vline(xintercept = 6.75, color = "black", linetype = "dashed") +
+#     theme_bw()
 
 
 # Let's look at modelling event to event transformation
@@ -251,7 +251,7 @@ loss_fn_H2H <- nn_bce_with_logits_loss(
 
 optimizer <- optim_adam(model$parameters, lr = 0.001, weight_decay = 1e-4)
 
-epochs <- 200
+epochs <- 300
 loss_curve <- numeric(epochs)
 for (epoch in 1:epochs) {
     shared_features <- model$shared(x_tensor) # forward pass
@@ -322,11 +322,124 @@ compute_metrics(
     test_states$state_end_num == 1
 )
 
+# --------------
+# SHAP values checking
 
-# ---
-# Probabilities
-tibble(
-    id = c(train_ids, val_ids),
-    NN = c(as.numeric(probs), as.numeric(val_probs))
-) %>%
-    write_csv("./data/processed/nn_probs.csv")
+library(fastshap)
+library(ggplot2)
+library(patchwork)
+
+# Define a prediction wrapper for a specific transition (e.g., L to H)
+# This forces the model to only use the self$head_L_to_H logic
+pfun_L2H <- function(object, newdata) {
+  object$eval()
+  x_t <- torch_tensor(as.matrix(newdata), dtype = torch_float())
+  
+  # Force start_state to 0 for all rows to isolate the L -> H head
+  s_t <- torch_zeros(c(nrow(newdata), 1), dtype = torch_float()) 
+  
+  with_no_grad({
+    probs <- torch_sigmoid(object(x_t, s_t))
+  })
+  return(as.numeric(probs))
+}
+
+X_train_matrix <- as.matrix(train_states %>% select(-c(state_start_num, state_end_num))) # Extract the feature matrix
+
+# Create a background dataset (required for Shapley integration)
+set.seed(42)
+X_background <- X_train_matrix[sample(nrow(X_train_matrix), 200), ] 
+
+# Filter for patients who actually started in State L for the evaluation
+idx_L <- which(train_states$state_start_num == 0)
+X_explain_L <- X_train_matrix[idx_L[1:500], ] # Subset for computational speed
+
+# Compute SHAP values
+shap_L2H <- explain(
+  model,
+  X = X_background,
+  pred_wrapper = pfun_L2H,
+  nsim = 50, # Increase for more stability, decrease for speed
+  newdata = X_explain_L
+)
+
+# Illustrate the creation of important features (SHAP Summary Plot)
+# We can use the SHAP matrix to create a traditional bee-swarm plot
+library(shapviz)
+sv_L2H <- shapviz(shap_L2H, X = X_explain_L)
+sv_importance(sv_L2H, kind = "bee") + 
+  theme_bw() #+
+  ggtitle("SHAP Values: Drivers of Low to High (Uncontrolled) Transition")
+
+# ------------
+
+model$eval()
+with_no_grad({
+  # Pass the entire training set through the shared representation block
+  hidden_reps <- model$shared(x_tensor)
+})
+
+# Convert to standard R matrix
+hidden_matrix <- as.matrix(hidden_reps)
+colnames(hidden_matrix) <- paste0("Node_", 1:32)
+
+# Calculate Pearson/Spearman correlation between the 55 inputs and 32 hidden nodes
+feature_correlations <- cor(X_train_matrix, hidden_matrix, method = "spearman")
+feature_correlations[is.na(feature_correlations)] <- 0
+
+# plot the correlations
+row_dist <- dist(feature_correlations) 
+row_hc <- hclust(row_dist, method = "complete")
+ordered_features <- rownames(feature_correlations)[row_hc$order]
+
+# Transpose the matrix to calculate distances between the hidden nodes (columns)
+col_dist <- dist(t(feature_correlations)) 
+col_hc <- hclust(col_dist, method = "complete")
+ordered_nodes <- colnames(feature_correlations)[col_hc$order]
+
+# 3. Reshape data to long format for ggplot2
+cor_df <- as.data.frame(feature_correlations) %>%
+  rownames_to_column(var = "Feature") %>%
+  pivot_longer(
+    cols = -Feature, 
+    names_to = "Hidden_Node", 
+    values_to = "Correlation"
+  ) %>%
+  # Apply the hierarchical clustering order to the factor levels
+  mutate(
+    Feature = factor(Feature, levels = ordered_features),
+    Hidden_Node = factor(Hidden_Node, levels = ordered_nodes)
+  )
+
+# Draw the plot using geom_tile
+ggplot(cor_df, aes(x = Hidden_Node, y = Feature, fill = Correlation)) +
+  geom_tile(color = "white", linewidth = 0.1) + # Light gridlines for readability
+  scale_fill_gradient2(
+    low = "#1034A6", mid = "#FFFFFF", high = "#DD1717", # Stronger diverging palette
+    midpoint = 0, limits = c(-1, 1), 
+    name = "Spearman\nCorrelation"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8),
+    axis.text.y = element_text(size = 7), # Adjusted to fit 55 inputs
+    axis.title.y = element_text(vjust = 8),
+    panel.grid = element_blank(),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    legend.position = "right",
+    plot.margin = margin(0.25, 0.25, 0.25, 0.75, "cm")
+  ) +
+  labs(
+    title = "Input Feature to Hidden Node Activation Mapping",
+    x = "Hidden Nodes (Clustered)",
+    y = "Input Features (Clustered)"
+  )
+
+ggsave("./figures/nn_feature_mapping.png", dpi = 300, 
+       height = 6, width = 12)  
+  
+  
+  
+  
+  
+  

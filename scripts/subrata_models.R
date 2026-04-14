@@ -420,3 +420,116 @@ cat("\n------ XGBoost (regularized) Feature Importance (top 20) ---------\n")
 imp_reg <- xgb.importance(feature_names = feat_cols, model = m_xgb_reg)
 print(imp_reg[1:min(20, nrow(imp_reg)), ], row.names = FALSE)
 
+# ----------
+tibble(
+  pred = p_xgb_reg_val,
+  target = df_val$target,
+  mask = df_val$mask
+) %>%
+  filter(mask == TRUE) %>%
+  ggplot() +
+  geom_density(aes(x = pred, fill = factor(target)), alpha = 0.5, color = NA) +
+  xlab("Predicted Probability") +
+  ylab("Density") +
+  scale_fill_manual(
+    values = c("Controlled" = "#008D98", "Uncontrolled" = "#D7433B"),
+    name = "A1c"
+  ) +
+  theme_classic() +
+  theme(
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 14)
+  )
+
+ggsave("./figures/xgboost_probs.png", dpi = 300, height = 4, width = 6)
+
+
+# -----
+
+library(tidyverse)
+library(yardstick)
+
+# 1. Prepare the data
+# IMPORTANT: yardstick requires the target variable to be a factor. 
+# We assume the positive class is the second level (e.g., "1" if levels are "0", "1").
+eval_df <- tibble(
+  pred = p_xgb_reg_val,
+  target = as.factor(df_val$target), 
+  mask = df_val$mask
+) %>%
+  filter(mask == TRUE)
+
+# 2. Calculate the ROC curve coordinates and the scalar AUC value
+# Adjust event_level to "first" if your target levels are ordered differently
+roc_coords <- roc_curve(eval_df, truth = target, pred, event_level = "second")
+auc_val <- roc_auc(eval_df, truth = target, pred, event_level = "second")$.estimate
+
+# 3. Build the plot
+ggplot(roc_coords, aes(x = 1 - specificity, y = sensitivity)) +
+  # Add a subtle, colorblind-safe background fill to anchor the visual weight
+  geom_area(fill = "#440154", alpha = 0.1) +
+  
+  # The reference line for a random classifier
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "#7a7a7a", linewidth = 0.8) +
+  
+  # Draw the ROC curve, coloring the path by the decision threshold
+  geom_path(aes(color = .threshold), linewidth = 1.5, lineend = "round") +
+  
+  # Use the 'plasma' palette: vibrant, high-contrast, and colorblind-safe
+  scale_color_viridis_c(
+    option = "plasma", 
+    direction = -1, # Invert so high thresholds are dark/cool, low are bright/warm
+    limits = c(0, 1),
+    name = "Decision\nThreshold"
+  ) +
+  
+  # Annotate the exact AUC score
+  annotate(
+    "label", 
+    x = 0.75, y = 0.25, 
+    label = sprintf("AUC = %.3f", auc_val), 
+    size = 5.5, 
+    fontface = "bold",
+    color = "black",
+    fill = "white",
+    label.size = NA # Removes the border of the label
+  ) +
+  
+  # Clean, rigorous theme
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, margin = margin(b = 15)),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray95"),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    legend.position = "right",
+    legend.title = element_text(size = 10, face = "bold")
+  ) +
+  ylim(0, 1) +
+  labs(
+    x = "False Positive Rate (1 - Specificity)",
+    y = "True Positive Rate (Sensitivity)"
+  )
+
+ggsave("./figures/xgboost_auc.png", dpi = 300, height = 4, width = 5.5)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
