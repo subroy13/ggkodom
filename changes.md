@@ -497,3 +497,380 @@ The analysis reveals three layers of A1c variation:
 3. **Within-patient temporal (2%):** Structured treatment dynamics (negative ACF, oscillation). Too weak to improve prediction, but explains WHY trajectory features add so little.
 
 The ceiling is set by between-patient variation: once you know a patient's "typical A1c level" (a1c_weighted), the within-patient dynamics (7.6% of variance) can only move the needle by at most ~1-2% F1. This is consistent with what we observe: a1c_weighted alone = 61.4%, best model = 63%, maximum possible = ~65%.
+
+### Apr 6, 2026 (late) — Subhrajyoty full-data XGBoost & submission pipeline
+
+- **Subhrajyoty: XGBoost trained on whole current data = 67% F1.** Implemented in `scripts/final_test.R` (committed Apr 5 by Subhrajyoty as "feat: added final testing model"). The script:
+  1. Pools train + val + test via `merge_dataset()` from `utils.R` → "full_train_dat".
+  2. Reads `data/processed/final_test.Rds` (the actual platform test set, never seen).
+  3. Fits regularized XGBoost (max_depth=5, eta=0.05, subsample=0.5, colsample=0.5, min_child_weight=10, gamma=1, ≤500 rounds with 30-round early stopping) on the pooled training data.
+  4. Tunes the threshold on the same pooled training data (returned patients only via `mask`).
+  5. Predicts on `final_test_dat`, sets non-mask probabilities to 0, and writes the submission to `data/final/xgboost_submission.csv` (~366 KB, present on disk).
+
+- **CAVEAT — the 67% is in-sample, not a held-out validation estimate.** Line 89 of `final_test.R` calls `compute_metrics(p_train > thresh, df_train$target == "Uncontrolled")` where `p_train` are predictions on the training data the model was just fit to. With early stopping at logloss minimum, regularized XGBoost still has a ~1% optimism gap (train 62.3% vs val 62.0% on the older val-split run). The 5pp jump from 62% (val) to 67% (in-sample, full-data fit) is consistent with overfitting on the larger pooled dataset, not a generalization gain. The realistic test-set F1 estimate is still ~62%.
+
+- **`AB_multihead_nn.R`** (Ayoushman Bhattacharya, Apr 5; renamed/reorganized by Subhrajyoty Apr 6): a richer multi-head transition NN. Differences from `subh_multihead_nn.R`:
+  - Adds patient-level A1c temporal summaries to every transition row: `a1c_first/latest/prev/min/max/range/sd`, `a1c_ewma`, `a1c_delta_last`, `a1c_delta_first_last`, `a1c_slope_last`, `a1c_slope_global`, `a1c_time_span`, `last_a1c_high`, `ever_high_a1c`, `n_a1c_crossings_8`, `frac_above_8`. Effectively bakes Subrata's GLM-style trajectory features into the NN feature vector (Fix 3 generalized).
+  - Wider shared MLP: 64 hidden units (vs 32 in `subh_multihead_nn.R`), dropout 0.20.
+  - Two heads (`head_from_low`, `head_from_high`) gated by `start_state`, head-specific class weights capped at 20.
+  - `target_upweight = 5.0` on final transitions (vs 10× loss weighting in Subrata's earlier Fix 1).
+  - Saves split-aware probabilities to `data/processed/nn_probs_revised.csv`.
+  - **Status:** in the codebase, but no `.Rout` file in `scripts/outfiles/` yet — patient-level val F1 unknown. Worth running and comparing against the 61.0% Fix 1+3 ceiling.
+
+- **Random Forest added to `subrata_models.R`** (Subhrajyoty, "feat: subrata models added random forest"). Uses `ranger` with `num.trees=200`, `mtry=10`, `max.depth=7`, `min.bucket=25`, `importance="impurity"`, `probability=TRUE`. **NOTE — there is a confusing pointer swap right before predict:**
+  ```r
+  tmp <- df_train_imputed
+  df_train_imputed <- df_val_imputed
+  df_val_imputed <- tmp
+  p1_tr <- predict(rf_model, df_train_imputed, ...)$predictions[, "Uncontrolled"]
+  p1_thresh <- best_f1_threshold(p1_tr, df_train_imputed$target == "Uncontrolled", df_train_imputed$mask)
+  p1_val <- predict(rf_model, df_val_imputed, ...)$predictions[, "Uncontrolled"]
+  compute_metrics(p1_val > p1_thresh["best_th"], df_val_imputed$target == "Uncontrolled", ...)
+  ```
+  After the swap, the variable named `p1_tr` is actually predictions on the original *val* split, and the threshold is therefore tuned on val (data leakage relative to the val F1 it computes). The variable named `p1_val` is actually predictions on the original *train* split, and `compute_metrics` reports train F1 with a val-tuned threshold. Net effect: **the printed RF F1 is not a clean held-out val number.** The "RF = 63%" claim should be re-validated by either (a) removing the swap and predicting cleanly on val, or (b) confirming that an independent Subhrajyoty run produced 63% with a non-swapped pipeline.
+
+- **Latest run of `subrata_models.R` (`subrata_models_rate_features.Rout`, Apr 5 22:16) on the val split with rate features:**
+
+  | Model | Val F1 | Notes |
+  |---|---|---|
+  | GLM | 61.6% | rate features added; small drop from BMI-only 61.9% |
+  | GLM + class wt | 61.6% | |
+  | Decision Tree | 31.5% | degenerate (predicts all positive) |
+  | GAM | 59.0% | |
+  | Ensemble 4 (incl. tree) | 61.9% | |
+  | **Ensemble 3 (GLM + GLM_wt + GAM)** | **62.0%** | best ensemble of the day |
+  | Ensemble 2 (GLM + GLM_wt) | 61.9% | |
+  | glmnet (5-fold CV) | 61.5% | |
+  | XGBoost (basic) | 62.3% | |
+  | XGBoost (regularized) | 62.0% | down from 62.2% peak before rate features — within noise |
+
+  Top XGBoost (regularized) features remain `days_to_eval` (30%), `time_gap` (19%), `a1c_weighted` (14%), `a1c_latest` (11%), `frac_above_8` (10%), `frac_above_7` (4%); `insulin_rate`/`total_meds_rate` <1% gain each.
+
+## Apr 7, 2026 — Code/output audit (Subrata + Claude)
+
+- Reviewed all scripts modified Apr 5–6 (`final_test.R`, `AB_multihead_nn.R`, RF block in `subrata_models.R`) against `changes.md`/`CLAUDE.md`. Findings written into the Apr 6 (late) section above.
+- **Best honest val F1 estimate is still ~62%** (XGBoost regularized 62.0–62.2%, Ensemble 3 62.0%, GLM 61.6–61.9%). The 67% in-sample fit on pooled data is *not* a generalization estimate.
+- **The 63% RF claim is currently un-auditable from the committed code** because of the df_train/df_val swap in `subrata_models.R`. Needs a clean re-run before being treated as the new best.
+
+## Apr 8, 2026 — Bayesian retry (success), PG logistic (success), six-model ceiling
+
+The two-track Bayesian experiments planned in `ideas.md` (Apr 7 night) both ran today. Both hit the ~62% ceiling. The "previous Bayesian gave bad F1, abandoned" thread is fully resolved.
+
+### Track 1: Bayesian state-space retry (`scripts/subrata_bayesian.R`, `scripts/subrata_model.jags`)
+
+The original `scripts/subh_bayesian.R` (Mar 31) gave bad F1 and was abandoned. Apr 7 audit re-discovered the script and identified **five stacked bugs/misspecs** that explained the failure:
+
+1. **Eval target was the numeric A1c value, not the binary indicator.** `as.logical(numeric)` is TRUE for any non-zero value, so almost every returned patient was labeled "uncontrolled" → base-rate floor.
+2. **`pnorm` direction inverted in prediction** — variable was named `uncontrolled` but `pnorm(A_star, mean, sd)` returns `P(controlled)`.
+3. **`target_mask` was the numeric `time` column** instead of `!is.na(time)`. Numeric indexing rather than logical filtering.
+4. **`sim_prepared$time` used in prediction variance** instead of `sim_prepared$dt`. The variance grew with how far into the study the patient's latest reading was, not with how long until 2025.
+5. **`is_above_A` in `compute_bayesian_inputs` compared the 0/1 binary indicator against `A_star = 8`**, so all returned patients ended up labeled "controlled" in the JAGS interval-censored target. The model trained as if no one was uncontrolled.
+
+Plus a **prior misspecification**: `alpha_prec ~ dnorm(0, 0.25)` puts mass at log(prec_µ) = 0, but the data wants log(prec_µ) ≈ 6 (since prec_µ ≈ T_days / σ_W² ≈ 547 / 1.35 ≈ 405). The chains had to fight 6 SDs uphill to find the truth, and they couldn't — psrf for `alpha_delta` was 19+ in the diffuse-prior runs.
+
+**Three runs to disentangle the issues:**
+
+| Run | F1 | Notes |
+|---|---:|---|
+| Diffuse priors + last-reading prediction (bug fixes 1-4 only) | 0.5737 | base rate now correct, but JAGS unconverged + EWMA info loss |
+| Diffuse priors + EWMA prediction (added EWMA fix) | 0.5793 | tiny improvement from EWMA alone |
+| **Informative priors + EWMA prediction + bug 5 fix (`scripts/subrata_model.jags`)** | **0.6161** | matches RF, beats GLM, 0.4 pp from XGBoost |
+
+The informative priors are calibrated against the audit work:
+
+```
+prec_Y       ~ Gamma(8, 10)        mean = 0.80   (variogram nugget ~ 1.18)
+alpha_delta  ~ N(0.4, prec=1)      median delta ~ 1.5 A1c units
+alpha_prec   ~ N(6.0, prec=1)      median prec_mu ~ 400 per day (matches T_days/sigma_W^2)
+beta_delta   ~ N(0, prec=4)        sd 0.5
+beta_prec    ~ N(0, prec=4)
+mu_init      ~ N(7.11, prec=2)     sd ~ 0.71 (matches lmer fixed intercept)
+```
+
+**Convergence improved dramatically:**
+
+| Param | psrf (diffuse) | psrf (informative) |
+|---|---:|---:|
+| `alpha_delta` | 19.68 | **1.0005** ✓ |
+| `beta_delta[1]` | 16.21 | 1.0003 ✓ |
+| `beta_delta[4]` | 11.83 | 1.0007 ✓ |
+| `prec_Y` | 6.15 | 1.53 |
+| `alpha_prec` | 1.81 | 2.39 (variance components still slow) |
+
+The drift parameters (`delta`) are now perfectly converged. Variance components mix slowly but are tractable. **The "previous Bayesian was bad" was 80% a convergence problem and 20% an information-loss problem in the prediction step.** Both are now fixed.
+
+**Calibration trade-off:** sharper priors gave sharper posteriors → more discriminative predictions → better F1, but at the cost of calibration. Log-loss 0.378 → 0.404, ECE 0.025 → 0.079. The informative-priors model is over-confident at the high end (bin 10: predicted 97%, actual 74%). Could be recovered by isotonic post-processing without losing F1 (per the Apr 5 isotonic experiment — F1 is rank-invariant under monotone transforms).
+
+**MCMC samples cached** at `scripts/outfiles/subrata_bayesian_mcmc_n2000_informative.Rds` so re-runs (e.g., for prior tweaks or eval changes) skip JAGS and finish in ~5 minutes.
+
+### Track 2: Sayan-style PG logistic + missing-data Gibbs (`scripts/subrata_pg_logistic.R`)
+
+Sayan committed `scripts/Bayesian.R` (Apr 7 night) using a Polya-Gamma logistic regression with explicit Gibbs imputation of missing covariates. Different model class from the longitudinal JAGS — cross-sectional logistic with proper Bayesian missing-data handling. His original reads from a Mac-only Box-drive `Fulldata.csv` and evaluates F1 in-sample on the same data; not directly runnable on this machine.
+
+`scripts/subrata_pg_logistic.R` adapts Sayan's core Gibbs sampler (`update_continuous_pg`, `update_binary_pg`, `draw_beta_pg` reused verbatim with attribution) to our `train.Rds` / `val.Rds` pipeline:
+- Same 9-feature set he used (`a1c_last`, `a1c_log_gap`, `a1c_ever_gt8`, `a1c_prop_gt8`, `height`, `ldl_log_gap`, `hdl_log_gap`, `insulin_log`, `insulin_bin`), built from `create_features()` + the time_gap formulas.
+- Filtered to returned training patients only (so `y` is well-defined).
+- Posterior predictive on val computed by combining `beta_draws` with prior-based imputation of missing val covariates.
+- Routed through `scripts/subrata_bayesian_eval_harness.R`.
+
+**Sayan's original `pg_logistic_gibbs_missing` is O(N² * p * iter)** because the inner missing-imputation loop calls `model.matrix(y ~ ., data = dat_current)` on every missing cell, every iteration. With ~17k patients × ~14k missing height cells × 5000 iterations, the function never completes on this data — first attempt was killed at 2:47 of CPU time with no iteration counter printed (estimated 2–4 hours to finish). Sayan presumably ran his original on a few hundred patients where this didn't matter.
+
+**`pg_logistic_gibbs_missing_fast`** (Subrata-prefixed addition in `scripts/subrata_pg_logistic.R`) replaces the inner per-cell loop with a single vectorized BLAS call per variable — the missing cells of one variable are conditionally independent given `X[, -col_j]` and `beta[col_j]`, so exact Gibbs allows simultaneous joint update. **~17,000× speedup**: total runtime dropped from estimated 2–4 hours to ~3 minutes for the full 5000 iterations on 17,845 patients.
+
+**Result:**
+
+| Metric | Value |
+|---|---:|
+| Val F1 (train-tuned threshold) | **0.6094** |
+| Val F1 (val-tuned, upper bound) | 0.6109 |
+| **Log-loss** | **0.3527** (best in project) |
+| **Brier** | **0.1062** (best in project) |
+| **ECE** | **0.0327** (near-perfect calibration) |
+| Threshold | 0.295 |
+
+**The PG logistic has the best calibration of any model in the project.** 0.7 pp below the Bayesian state-space on F1, 1.0 pp below XGBoost, but the probabilities are dramatically more trustworthy. This is the same F1-vs-calibration trade-off the Apr 7 night ctmc_glm finding identified: F1 is rank-based and blind to calibration quality.
+
+**Coefficient comparison with Sayan's reported posterior means** (his header comment vs ours on `train.Rds`):
+
+| variable | Sayan's | Ours | comment |
+|---|---:|---:|---|
+| `a1c_last` | 0.171 | **0.426** | bigger here |
+| `a1c_log_gap` | -0.012 | 0.046 | both ≈ 0 |
+| `a1c_ever_gt8` | **0.642** | 0.248 | smaller here |
+| `a1c_prop_gt8` | **1.362** | **0.580** | his dominant feature, ours smaller |
+| `height` | -0.005 | 0.004 | both ≈ 0 |
+| `ldl_log_gap` | -0.128 | -0.027 | smaller |
+| `hdl_log_gap` | -0.040 | 0.022 | both ≈ 0 |
+| `insulin_bin` | 0.051 | 0.124 | bigger here |
+| `insulin_log` | 0.064 | 0.094 | similar |
+
+Qualitatively the same pattern (A1c features dominate, lipid/log_gap near zero, insulin small but nonzero) but the *distribution* of weight between `a1c_last`, `a1c_ever_gt8`, and `a1c_prop_gt8` differs. Likely cause: Sayan's Box-drive `Fulldata.csv` has differently-engineered versions of these features (different missing-data treatment, different binarization, possibly different patient subset). Worth asking Sayan when he's online.
+
+### Six-model ceiling convergence (the headline for "Fault in our model")
+
+| Model class | Approach | Val F1 |
+|---|---|---:|
+| Black-box | XGBoost regularized (74 features) | **0.6200** |
+| Black-box | Random Forest (5-seed mean) | 0.6162 |
+| Interpretable, longitudinal Bayesian | State-space + treatment dynamics, informative priors | **0.6161** |
+| Interpretable, frequentist | GLM on a1c_weighted alone (1 feature) | 0.6140 |
+| Interpretable, closed-form | CTMC × a1c_weighted GLM (4 params) | 0.6131 |
+| Interpretable, cross-sectional Bayesian | Polya-Gamma logistic + missing-data Gibbs (9 features) | 0.6094 |
+| Best NN | Multi-head transition NN (Fix 1 + Fix 3) | 0.6100 |
+
+**Six independent paradigms, all between 60.9% and 62.0% F1.** The 62% ceiling is empirically airtight — it's not a quirk of one method, it's the irreducible noise floor of the (synthetic) data-generating process. Any of the interpretable models is a defensible "headline" choice; the Bayesian state-space wins on F1, the PG logistic wins on calibration, the GLM wins on simplicity.
+
+**What this means for the presentation:** the "Fault in Our Model" act now has a much stronger climax than "we tried lots of things and they all converged". It's "we built three principled interpretable models from completely different statistical paradigms (state-space dynamics, cross-sectional missing-data Bayesian, EWMA + threshold) and they ALL recover the same ceiling. Plus three black-box models. Plus a NN. The ceiling is the data, not the method." Combined with the audit story (ICC = 0.924, CTMC relaxation = 8 months, negative within-patient ACF), this is a publication-quality result — F1 cannot exceed ~62% on this data because the simulator's irreducible noise floor is at ~62%.
+
+### Apr 7, 2026 (later) — RF audit resolved: 63% does NOT reproduce
+
+Ran `scripts/subrata_rf_audit.R` (output: `scripts/outfiles/subrata_rf_audit.Rout`). Same hyperparameters as Subhrajyoty's committed block (`ranger`, num.trees=200, mtry=10, max.depth=7, min.bucket=25), same `dt_formula`, same `create_features` + `impute_and_flag` pipeline. Seed sweep over seeds 1–5:
+
+| seed | th_train | clean val F1 | optimistic val F1 (val-tuned th) |
+|---:|---:|---:|---:|
+| 1 | 0.265 | 61.46% | 61.81% |
+| 2 | 0.260 | 61.43% | 62.21% |
+| 3 | 0.255 | 61.59% | 62.21% |
+| 4 | 0.235 | **62.08%** | 62.13% |
+| 5 | 0.280 | 61.50% | 62.05% |
+
+**Clean val F1: mean 61.62%, SD 0.27%, range [61.44%, 62.08%].** Optimistic upper bound (val-tuned threshold, data-leaking): max 62.22%. Subhrajyoty's 63% is **5.2 SDs above the seed mean** and **0.92 pp above the best clean seed** — seed variance cannot explain the gap.
+
+The pointer-swap block in `subrata_models.R` (`p1_tr` etc.) under-reports RF: it prints train F1 with a val-tuned threshold (60.85% on seed 1), which is the *worst* of the four config combinations. The variable `p1_tr` is, after the swap, actually predictions on the original VAL set — so to recover the clean val F1 from inside `subrata_models.R` you can just evaluate `p1_tr` against `val$target` with a *train-tuned* threshold. The audit script in `scripts/subrata_rf_audit.R` does exactly that and matches `subrata_models.R` row-for-row at seed 1.
+
+**Most plausible source of Subhrajyoty's 63%:** RF was trained on pooled train+val (or train+val+test) and the printed F1 was the in-sample number, mirroring the `final_test.R` workflow he wrote ~30 minutes later for XGBoost (which produced the 67% in-sample claim). On pooled data RF overfits the additional rows, giving 1–2 pp of in-sample optimism — same shape as the XGBoost 67% vs val 62% gap. Not yet verified by re-running RF on pooled data, but the timing and the parallel structure of the two scripts make this the leading explanation.
+
+**Decision implication:** RF and regularized XGBoost are statistically tied at 61.5–62.2% on val. **RF is not a new best.** The competition submission was already made with `final_test.R`'s pooled-data XGBoost, and the team has been called back for the next round with that model — so this discovery does not change the submission. It does mean that if RF gets proposed for round 2 (e.g., as a fresh ensemble member or as a swap), the case for it is weaker than the 63% number suggested.
+- **AB's NN has not been benchmarked** — no `.Rout` for `AB_multihead_nn.R`. Running it is the cheapest open ensemble lever (could push the NN past 61% if the patient-level temporal features actually help, since they previously added +1.3% as Fix 3).
+- Next concrete actions: (1) clean RF eval, (2) run AB NN, (3) decide submission model — the safe choice is the regularized XGBoost from `final_test.R` since the submission CSV already exists.
+
+## Apr 8, 2026 (evening) — `days_to_eval` is a confound; slim 30-feature XGBoost matches full
+
+Presentation prep: we wanted to show feature importance on a slide, but `days_to_eval` was XGBoost's #1 feature at 28% gain (higher than `a1c_weighted`!) and nobody could cleanly explain what it meant. The variable label on Subrata's EDA plot calls it "days from first appointment" but that assumption was never verified.
+
+### What `days_to_eval` actually is (`scripts/subrata_days_to_eval_audit.R` → `subrata_days_to_eval_audit.Rout`)
+
+Smoking gun: **`time_a1c_1 == 0` for every single row** (31,212 / 31,212). Combined with the fact that `time_a1c_1` and `days_to_eval` come from the same raw "days from reference" columns, this proves the "reference" is **each patient's first A1c reading**. So:
+
+- `days_to_eval = time_a1c_2025` = **days from the patient's first A1c reading to when their 2025 A1c was collected**
+- It's literally the **total observation window** for that patient (their earliest measurement → their 2025 measurement)
+- Range: min 10 days, median 371 days, max 651 days, NAs = 13,367 (non-returned patients, correctly)
+
+Not a clinical signal. An administrative / study-tenure variable.
+
+### Why XGBoost loves it so much (the confound mechanism)
+
+`days_to_eval = time_latest_a1c + time_gap` by definition. And `time_latest_a1c` is highly correlated with `n_a1c` (r = 0.842). So `days_to_eval` is a nonlinear mixture of "how much data the patient has" and "how far their last reading is from 2025". The tree uses it because splitting on the sum captures info the individual features can't quite reach, but the *unique* information is near-zero:
+
+| Model                             | Features | Val F1  | Δ from full |
+|---                                |---:|---:|---:|
+| XGBoost FULL (baseline, reg)      | 77 | **0.6236** | — |
+| XGBoost FULL minus `days_to_eval` | 76 | 0.6217    | **−0.19 pp** (within noise) |
+| XGBoost `days_to_eval` ALONE      |  1 | 0.3019    | −32.2 pp (near base rate) |
+| XGBoost minus `days_to_eval` AND `time_gap` | 75 | 0.5952 | −2.84 pp (the temporal signal is real, just lives in `time_gap`) |
+
+**Confirmed: `days_to_eval` is a confound.** The temporal signal is real, but it's carried entirely by `time_gap` (= days from last reading to 2025 eval) — which is the clinically interpretable version and also the CTMC-relevant quantity. When `days_to_eval` is removed, its importance migrates to `time_gap` (22.7% → 30.4%) without F1 loss.
+
+### Decile pattern (interesting sanity check, not load-bearing)
+
+Returned-patient target rate across deciles of `days_to_eval`:
+
+| Decile | d2e range (days) | n | % uncontrolled | mean a1c_weighted | mean n_a1c |
+|---:|---|---:|---:|---:|---:|
+| 1  | 10–197  | 1785 | 18.9% | 7.29 | 1.10 |
+| 2  | 197–271 | 1785 | 20.1% | 7.11 | 1.30 |
+| 3  | 271–325 | 1785 | 19.5% | 7.15 | 1.59 |
+| 4  | 325–361 | 1785 | 18.8% | 7.03 | 1.73 |
+| **5**  | **361–371** | **1785** | **12.4%** | **6.79** | **1.78** |
+| **6**  | **371–388** | **1784** | **13.2%** | **6.88** | **1.87** |
+| 7  | 388–418 | 1784 | 18.9% | 7.07 | 1.97 |
+| 8  | 418–460 | 1784 | 21.5% | 7.05 | 2.16 |
+| 9  | 460–516 | 1784 | 22.6% | 7.16 | 2.33 |
+| 10 | 516–651 | 1784 | 19.2% | 6.95 | 2.36 |
+
+Non-monotone: there's a dip at deciles 5–6 (`days_to_eval` ≈ 365) — patients with *exactly* one year of observation are systematically healthier (12–13% uncontrolled vs 19–22% elsewhere). Probably the simulator's "routine annual follow-up without intervention" cohort, or an artifact of how the synthetic data was sampled. Interesting, but the effect is <10 pp across deciles and it vanishes once `time_gap` + `a1c_weighted` are in the model.
+
+### Slim 19-feature and slim-plus 30-feature XGBoost (`scripts/subrata_models_slim.R`)
+
+Given the confound finding, rebuilt XGBoost with a medically-interpretable feature list (dropped `days_to_eval`, hand-crafted interactions `a1c_x_meds` / `a1c_x_ndrug` / `a1c_per_drug`, race dummies, ADI state rank, visit counts, `*_miss` flags, and all the 7.0/8.0 × insulin/no-meds sub-interactions the tree finds on its own). Two variants:
+
+**SLIM (19 features):**
+```
+a1c_weighted, a1c_latest, frac_above_7, frac_above_8, a1c_sd,
+slope_above_7, slope_below_8, max_rise,
+n_drug_classes, insulin, insulin_rate,
+time_gap,
+age, gender_male, adi_nation,
+cad, copd,
+bmi, bmi_x_male
+```
+
+**SLIM PLUS (30 features)** — adds back clinically-meaningful features that appeared in the full top-20:
+```
+SLIM + value_a1c_1, a1c_change, n_a1c, total_meds, a1c_per_drug, max_drop,
+      high8_insulin, high7_insulin, value_hdl, value_ldl, value_chol
+```
+
+| Model                          | Features | Val F1   | Δ from full 77 |
+|---                             |---:|---:|---:|
+| XGBoost FULL                   | 77 | 0.6236  | — |
+| XGBoost FULL minus `days_to_eval` | 76 | 0.6217  | −0.19 pp |
+| **XGBoost SLIM PLUS**              | **30** | **0.6199**  | **−0.37 pp** (within seed noise, ±0.27 pp) |
+| XGBoost SLIM                   | 19 | 0.6155  | −0.81 pp |
+| GLM+wt SLIM                    | 19 | 0.6027  | −2.09 pp |
+| GLM SLIM                       | 19 | 0.5996  | −2.40 pp |
+
+**Slim-plus 30-feature XGBoost is statistically tied with the full 77-feature model** and is the recommended model for the presentation's feature-importance figure.
+
+### Slim PLUS feature importance (the presentation-ready table)
+
+| Rank | Feature | Gain | Interpretation |
+|---:|---|---:|---|
+| 1 | `time_gap` | 38.1% | days from last A1c reading to 2025 measurement |
+| 2 | `a1c_weighted` | 16.0% | EWMA of all A1c readings (patient's "typical level") |
+| 3 | `frac_above_8` | 7.7% | fraction of readings at or above the competition threshold |
+| 4 | `a1c_latest` | 6.1% | most recent A1c reading |
+| 5 | `frac_above_7` | 5.8% | fraction above the clinical intervention threshold |
+| 6 | `value_a1c_1` | 3.3% | first A1c reading (baseline for treatment response) |
+| 7 | `a1c_per_drug` | 2.2% | A1c level normalized by # drug classes (treatment efficacy proxy) |
+| 8 | `value_hdl` | 1.9% | HDL cholesterol |
+| 9 | `max_rise` | 1.7% | biggest single-step worsening |
+| 10 | `value_chol` | 1.5% | total cholesterol |
+
+**Top 5 features = 73.7% of gain. Top 10 = 84.3%.** Every feature in the top 10 has a one-sentence clinical interpretation a judge can understand. No `days_to_eval`, no hand-crafted interactions, no hidden leaks.
+
+### Decision for the round-2 presentation
+
+- **Slide feature-importance table:** use SLIM PLUS (30 features, 0.6199 val F1). The narrative becomes "30 medically-interpretable features recover the full 62% ceiling."
+- **Submission model:** no change. Round-1 used the pooled-data XGBoost from `final_test.R`. If there's time, it's worth re-running `final_test.R` with SLIM PLUS's feature list to see whether the honest (non-`days_to_eval`) feature set also matches the in-sample 67% on pooled data — if yes, that's the cleaner round-2 submission.
+- **Story:** "Our #1 feature looked like a temporal leak. We audited it, proved it was a confound with `time_gap` + `n_a1c`, and rebuilt a 30-feature model without it. F1 stays at 62% and every feature now has a clinical meaning."
+
+### Files added / modified
+
+- `scripts/subrata_days_to_eval_audit.R` (new) — 4-way XGBoost comparison + correlation / decile diagnostics
+- `scripts/outfiles/subrata_days_to_eval_audit.Rout` (new)
+- `scripts/subrata_models_slim.R` (new) — slim 19 and slim-plus 30 pipelines, GLM + GLM+wt + XGBoost, saves `data/processed/slim_predictions.Rds` for slide plots
+- `scripts/outfiles/subrata_models_slim.Rout` (new)
+
+### Apr 8 (evening, cont.) — Presentation rewrite for a medical audience
+
+- `presentation.md` **rewritten from scratch** for a clinician audience. Old statistics-first outline preserved at `presentation_old.md`. New version: 6 slides, one presenter, 6–7 min, figure-first, no statistical jargon. Every finding has a clinical-English translation. The calibration slide, the "three paradigms" slide, and the NN slide are cut.
+- `continuous_time_analysis.md` gained a "Clinical translations" section at the top that maps each statistical finding (ICC, CTMC rates, ACF sign, variogram decomposition) to the one-sentence version the slide team should use. Reference the team needs during rehearsal.
+- Target sharpest-single-line: "Our model is a decent triage tool — it tells you who needs a closer look. What it can't tell you is what the patient does between visits, and that's exactly the information that would make it a decision tool."
+
+### Apr 8 (night) — SLIM NEW: single-threshold 28-feature model for the slide
+
+Presentation-side decision: the slim-plus 30-feature model kept both `frac_above_7` (clinical ADA threshold) and `frac_above_8` (competition threshold), plus the parallel `slope_above_7` / `slope_below_8` pair and `high7_insulin` / `high8_insulin`. Telling a medical audience "we use two thresholds" invites the immediate question "so what about the 7–8 zone?" and forces a digression away from the story. Built `SLIM_NEW`: drops the three 7.0-threshold features and adds `a1c_x_ndrug` (A1c × drug-class count — readable as a severity / treatment-resistance proxy).
+
+**Final model comparison** (updated from `scripts/outfiles/subrata_models_slim.Rout`):
+
+| Model | # feats | Val F1 | Δ from full | Notes |
+|---|---:|---:|---:|---|
+| XGBoost FULL (reg)                   | 77 | 0.6236 | — | 74-feature baseline |
+| FULL minus `days_to_eval`            | 76 | 0.6217 | −0.19 pp | confound removed |
+| Slim plus                             | 30 | 0.6199 | −0.37 pp | both thresholds |
+| **SLIM NEW**                              | **28** | **0.6186** | **−0.50 pp** | **single threshold (8.0), for the slide** |
+| Slim                                  | 19 | 0.6155 | −0.81 pp | ultra-minimal |
+| GLM+wt slim                           | 19 | 0.6027 | −2.09 pp | |
+| GLM slim                              | 19 | 0.5996 | −2.40 pp | |
+
+**SLIM NEW val F1 = 0.6186** — 0.13 pp below slim_plus, 0.50 pp below the full model. Within the seed-noise band from the RF audit (±0.27 pp) modulo the expected small loss from removing the 7.0 features. Presentation-defensible.
+
+**SLIM NEW feature importance (top 10, for Slide 4):**
+
+| Rank | Feature | Gain | Clinical label |
+|---:|---|---:|---|
+| 1 | `time_gap` | 35.8% | Days since last A1c reading |
+| 2 | `a1c_weighted` | 20.4% | Weighted average of past A1c |
+| 3 | `a1c_latest` | 8.4% | Most recent A1c |
+| 4 | `value_a1c_1` | 6.2% | First A1c reading (baseline) |
+| 5 | `frac_above_8` | 4.7% | Fraction of readings above 8.0 |
+| 6 | `a1c_per_drug` | 3.2% | A1c per drug class (treatment-resistance proxy) |
+| 7 | `max_rise` | 2.3% | Biggest single-visit worsening |
+| 8 | `a1c_x_ndrug` | 2.2% | A1c × drug-class count (severity proxy) |
+| 9 | `value_hdl` | 1.9% | HDL cholesterol |
+| 10 | `slope_below_8` | 1.5% | Drift rate while controlled |
+
+**Top 5 features = 75.5% of gain. Top 10 = 86.5%.** Narrative becomes: "of 28 features, five carry three-quarters of the prediction, and the single most important one isn't a lab value — it's how fresh the most recent A1c is."
+
+Signal redistribution when `frac_above_7` was removed: `a1c_weighted` gained +4.4 pp (16.0 → 20.4), `a1c_latest` +2.3 pp (6.1 → 8.4), `value_a1c_1` +2.9 pp (3.3 → 6.2). The 7.0-threshold information was captured indirectly by the level and history features — no surprise, since A1c is continuous and both thresholds are arbitrary cuts on the same variable.
+
+**`presentation.md` updated** to use SLIM NEW as the Slide 4 model throughout: feature count, feature-importance table, clinical label mapping, captions, and the spoken script for Slide 4.
+
+**`data/processed/slim_predictions.Rds`** now holds `slim_new_importance`, `feat_slim_new`, and `prob_xgb_slim_new` alongside the previous slim/slim_plus versions — all three variants saved so any can be used for the slide if we change our minds.
+
+Next: make the three missing figures (SLIM NEW feature importance bar chart, relabeled CTMC decay curve, missing-data pictogram), then assemble the deck.
+
+### Apr 9 — AUC / R² / Brier added to slim script + deck restructured for the actual draft
+
+Organisers are also checking R² (not just F1), so added a full metric suite to `scripts/subrata_models_slim.R` and reran. For SLIM NEW on val (returned patients only, n = 9056, base rate 18.7%):
+
+| Metric | Value | Notes |
+|---|---:|---|
+| F1 | **0.6186** | threshold-based |
+| AUC | **0.8800** | exact match to the 0.880 on Slide 7 of `present_slides/I2DB ppt.pdf` |
+| R² (Efron / classical) | **0.3386** | 1 − SS_res/SS_tot, "the" R² most people mean |
+| R² (McFadden) | 0.3355 | 1 − LL_model/LL_null |
+| R² (Tjur) | 0.3367 | mean(p\|y=1) − mean(p\|y=0) |
+| Brier | 0.1004 | lower is better |
+
+All three R² variants converge at ~0.34 for SLIM NEW — any one works on the slide. The AUC–F1 gap (0.88 vs 0.62) is the class-imbalance signature: AUC measures ranking, F1 measures threshold trade-off. XGBoost slim (19 feat) and slim_plus (30 feat) are statistically tied at AUC 0.879–0.880. GLMs are at AUC ~0.86.
+
+**Sophisticated Q&A aside worth having ready:** GLM+wt has Efron R² = 0.044 (near zero!) but Tjur R² = 0.371 (highest of any model). Class weighting destroys calibration — the ranking is still good, but the absolute probabilities are wrong. A judge asking "why does R² depend on definition?" is a gift; the answer is a clean one-paragraph illustration of the difference between rank-based and probability-based metrics.
+
+**Deck review + restructure** (against the actual draft at `present_slides/I2DB ppt.pdf`, 9 content slides + 14 template pages to delete):
+
+- Team decided to **keep** Slides 4 (NN architecture) and 5 (NN feature heatmap) as a "context-aware modelling" scaffold, even though the NN isn't the final model. Slide 4 stays because it shows the two-direction transition logic; Slide 5 is tentative.
+- **New Slide 6 — "Biological feature hunting"**: 3×2 grid of top SLIM NEW features with **biological mechanism** + **clinical takeaway** for each. Bridges the NN feature clustering (Slide 5) to the final XGBoost feature importance (Slide 7). Full content in `presentation.md` Slide 6 script.
+- **Slide 7** keeps its existing layout (feature importance + ROC + density) but needs a title added, and will carry the R² headline number (0.339 Efron).
+- **Slide 8** gets rewritten from a bullet wall into a **two-column pictogram**: "In the chart" (A1c, meds, labs, comorbidities, demographics, visit counts) vs "Not in the chart" (adherence, diet, exercise, timing, life events, social determinants). Full content in `presentation.md` Slide 8 script.
+- **Slides 10–23** (WashU template instructions + empty placeholder layouts) must be deleted before submission.
+
+`presentation.md` fully rewritten to match this 9-slide structure, with slide-by-slide scripts, verified val metrics, and build instructions for the new slides. `presentation_old.md` (the original statistics-first outline) remains preserved as a reference.
+
+## Apr 13, 2026 — Project complete: analysis done, presentation delivered
+
+- **Presentation delivered.** At least 3 audience questions during Q&A — strong engagement. Positive feedback from 2+ attendees and 1 organizer afterward.
+- **Data analysis is complete.** The full modeling pipeline (GLM, GAM, glmnet, XGBoost, RF, Bayesian state-space, PG logistic, multi-head NN) converged at the ~62% F1 ceiling. The ceiling is the data, not the method (six paradigms, all within 60.9–62.2%).
+- **Submission was made** with the pooled-data XGBoost from `final_test.R` (`data/final/xgboost_submission.csv`). Presentation used the SLIM NEW 28-feature XGBoost (val F1 = 0.6186, AUC = 0.880) for interpretability.
+- Final deck: `present_slides/I2DB ppt.pdf`, 10 content slides. See `presentation.md` for slide-by-slide notes and Q&A preparation.

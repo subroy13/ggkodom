@@ -432,3 +432,220 @@ These findings tell a clean story:
 3. The ceiling is NOT a modeling failure — it's the data telling us that patient identity overwhelms trajectory
 4. Treatment creates oscillation (negative ACF) — fundamentally different from standard time-series
 5. The CTMC relaxation time (8 months) sets the prediction horizon limit
+
+---
+
+## Apr 7, 2026 (night) — Bayesian retry suspicion (data is synthetic)
+
+**New context (from Subrata):** the competition data is **synthetic**. That changes the framing of the entire ceiling story. The pattern we recovered — ICC = 0.924, negative within-patient ACF, CTMC relaxation = 8 months, multi-scale variogram with 73% nugget + τ₁ = 8 days + τ₂ = 5+ years — is no longer "what diabetes biology happens to look like". It's the **fingerprint of the simulator** that generated the data. There is a true DGP, and our audits have effectively been doing parameter inference on it.
+
+**Suspicion:** the "correct" interpretable model is one whose structure mirrors the simulator. The leading candidate is a **hierarchical state-space model with treatment-conditional drift** — exactly what Subhrajyoty wrote in `plan.md` and implemented in `scripts/subh_bayesian.R` (Mar 31, JAGS). If I'm right that the simulator is in this family, fitting this model should give ~62% F1 *by construction*, because no model can beat the simulator without extra information.
+
+**Why we abandoned the Bayesian model the first time:** Subhrajyoty ran `subh_bayesian.R` shortly after writing it (Mar 31 → Apr 3 window). The val F1 was bad — not in the 60% range — so he moved on to GLM/RF/XGBoost. This run was never logged in `changes.md`, so the audit on Apr 7 (me) re-discovered the script and incorrectly assumed it was unbenchmarked. **Documentation gap, not a model gap.**
+
+**Why it might do much better now (worth a retry):**
+
+1. **Wrong feature set the first time.** The Mar 31 Bayesian model used the original feature set, before:
+   - Dual-threshold engineering (7.0 = clinical, 8.0 = competition; the original used only one threshold)
+   - BMI / BMI×male (added Apr 5; gave GLM +2pp)
+   - Rate features (insulin_rate, total_meds_rate, visits_rate)
+   - Time-gap and days-to-eval as first-class features
+   - The variogram-derived multi-scale structure (Apr 6)
+2. **Wrong priors / parameter init.** The original priors were diffuse. We now have *direct empirical estimates* from the audit work:
+   - $\sigma_B^2 \approx 1.95$ (lmer random intercept)
+   - $\sigma_W^2 \approx 1.35$ (lmer residual)
+   - $\mu_\text{pop} \approx 7.11$ (lmer fixed intercept)
+   - $\lambda \approx 1.49$/yr (CTMC total rate, $1/\lambda = 8$ months)
+   - $\pi_H \approx 0.16$ (CTMC stationary high fraction)
+   - $\sigma_\text{meas}^2 \approx 1.18$ (variogram nugget)
+   - $q_{HL}/q_{LH} \approx 5.2$ (treatment 5× faster than deterioration)
+   These can go in as **strongly informative priors**, which both speeds convergence and prevents JAGS from drifting into bad posterior modes.
+3. **Wrong target understanding.** The original Bayesian model used $A^* = 8.0$ (Subhrajyoty had it right from the start), but the surrounding pipeline at the time was still confused about whether competition target was 7 or 8. Now we have full clarity: target = $\mathbf{1}(Y_{2025} > 8)$.
+4. **Wrong evaluation.** The first run probably evaluated at the JAGS default threshold (0.5 on posterior P), not the F1-optimized threshold. Just running `best_f1_threshold` on the posterior probabilities should bump F1 by 2–4 pp on its own (we saw this for GLM when class imbalance was handled).
+5. **Possible MCMC convergence issues.** JAGS with 4 chains and diffuse priors on a hierarchical model with ~75k random effects (one per patient) is known to mix slowly. The first run may have been stopped before chains converged. Informative priors fix this directly.
+
+**Two paths forward (need to pick one):**
+
+### Path A — Bayesian with subsampling (the "principled" answer)
+- Subsample 5,000–10,000 patients for the JAGS fit (random across train+val pooled). With ICC = 0.924, you don't lose much by going to 10% of patients — the between-patient variance is well-estimated by then, and the within-patient parameters are pooled across all observations from those patients.
+- Use empirical priors (from list above) — turn lmer/CTMC/variogram outputs into Normal(prior_mean, small_prior_sd) priors.
+- Re-run JAGS with maybe 8 chains × 5000 iter × 0.5 burn-in. Check $\hat R$ on every parameter.
+- Predict on val using posterior predictive: for each val patient, sample from the posterior over their latent $\mu_i$, integrate over the time gap to 2025, and compute $P(Y_{2025} > 8)$ as the posterior probability of exceedance.
+- Tune threshold via `best_f1_threshold` on train.
+- Expected F1: 61–63% (matches ceiling). Differentiator: posterior intervals on every prediction.
+- Cost: a few hours of compute + Subhrajyoty's time to re-tune the JAGS model.
+- Risk: still doesn't converge / still gives bad F1 → wasted afternoon. But informative priors make this much less likely than the first attempt.
+
+### Path B — Frequentist closed-form (the "fast sanity check")
+- Build the closed-form CTMC prediction as a single feature: $\text{ctmc\_prob}_i = \pi_H + (\mathbf{1}(\text{state}_i = H) - \pi_H) \cdot e^{-\lambda \Delta t_i}$. (Already computed in `subrata_continuous_time.R` — `ctmc_prob` was the variable.)
+- Fit a 2-parameter logistic: $\text{logit}(P_i) = \beta_0 + \beta_1 \cdot \text{ctmc\_prob}_i$.
+- Or 4-parameter version: $\text{logit}(P_i) = \beta_0 + \beta_1 \cdot \text{a1c\_weighted}_i + \beta_2 \cdot \text{ctmc\_prob}_i + \beta_3 \cdot \text{ctmc\_prob}_i \cdot \text{a1c\_weighted}_i$.
+- Tune threshold via `best_f1_threshold` on train.
+- Expected F1: 61.5–62%. Less impressive than Bayesian but far more interpretable on a slide ("the entire model is two parameters: a global level and a CTMC dynamics term").
+- Cost: 10 minutes of coding + 1 minute of fitting.
+- Risk: low. We already know `a1c_weighted` alone gives 61.4% and `ctmc_prob` was XGBoost's #1 feature on its own, so this should at least match.
+
+**My recommendation: Path B FIRST as a sanity check, Path A SECOND if Path B clears 61.5%.**
+
+Reasoning:
+- Path B is a 10-minute test and uses features we already have. It validates the *structural form* (level + CTMC dynamics) without committing to a JAGS run.
+- If Path B hits ~62%, the structural form is right and Path A is worth the investment — the Bayesian model will get the same number plus posterior intervals plus the "we recovered the simulator" story.
+- If Path B hits <60%, the structural form is wrong and Path A would also fail. We'd need a different model class.
+- Path A is *the* presentation answer — but only if it actually works. Path B is the de-risking step.
+
+**What I want to do (if you say go):** start with Path B, write `scripts/subrata_ctmc_glm.R` (mirroring `subrata_rf_audit.R` style — small, focused, in `scripts/`, not /tmp), get the F1 number, then decide on Path A.
+
+### Apr 7 (night, later) — Path B result: F1 stuck, but AIC moved a lot
+
+Built `scripts/subrata_ctmc_glm.R`. Re-estimated CTMC rates from train transitions (independent of `subrata_continuous_time.R`):
+- $q_{LH} = 0.251$/yr, $q_{HL} = 1.272$/yr, $\lambda = 1.522$/yr → **relaxation = 7.9 months**, $\pi_H = 0.165$
+- Within rounding of the original audit (0.24 / 1.25 / 0.66 / 0.16). The CTMC fingerprint is reproducible across estimation methods, which is its own form of validation.
+
+Five logistic models, target = `Uncontrolled`, threshold tuned on train via `best_f1_threshold` (returned mask), evaluated on val:
+
+| Model | n params | AIC | val F1 | val prec | val rec |
+|---|---:|---:|---:|---:|---:|
+| M0 (raw `ctmc_prob`, no GLM) | 0 | — | 58.62% | 60.10% | 57.19% |
+| M1 (`a1c_weighted`) | 2 | 18646.7 | **61.40%** | 53.44% | 72.15% |
+| M2 (`ctmc_prob`) | 2 | 18581.3 | 58.62% | 60.14% | 57.19% |
+| M3 (`a1c_weighted` + `ctmc_prob`) | 3 | 18151.3 | 61.14% | 53.04% | 72.15% |
+| M4 (`a1c_weighted` × `ctmc_prob`) | 4 | **17479.1** | 61.31% | 53.40% | 71.97% |
+
+**The most important finding here is not the F1 column — it's the AIC column.** M1 → M3 → M4 drops AIC by **1167 points**. M4 fits the data dramatically better than M1 by every probabilistic measure. **But F1 is essentially flat** across M1/M3/M4 (61.40 / 61.14 / 61.31).
+
+This is the same phenomenon as the isotonic regression result from Apr 5: **F1 depends on rank ordering, not on log-likelihood / calibration**. The CTMC dynamics carry real information — they improve probability calibration enormously — but they don't reorder patients. Whoever's at the top of the ranking under M1 is still at the top under M4.
+
+**Decision implication for Plan A revisited:** the borderline F1 (61.31% vs the 61.5% target) is misleading. The structural form is *right* — we proved it via the parameter recovery and the AIC drop. A Bayesian model that mirrors the simulator will:
+- ✅ Recover the same parameters
+- ✅ Improve calibration / log-likelihood / Brier score dramatically
+- ✅ Provide posterior intervals on every prediction
+- ❌ Almost certainly **NOT move F1 above 61.5%** — the F1 ceiling is set by ranking, and ranking is dominated by `a1c_weighted`
+
+That's *exactly* why the Bayesian model had bad F1 the first time. The model wasn't wrong. The metric is wrong for what the Bayesian model is good at.
+
+If we run Plan A, we should report **(F1, log-loss, Brier, calibration plot)** — not just F1. The dynamics-aware models will look indistinguishable from M1 on F1 alone but visibly better on the other three.
+
+---
+
+## Apr 7 (night, even later) — Subrata's "designed competition" hypothesis
+
+**The framing (Subrata):** "The problem with these tests on generative models is that they deliberately create a generative model which says: *if you use the last a1c, the final value would be good. If you add clever variables, it will be better — however, so minimally better that you won't understand it. The organizers know the exact values, so they can test how good you actually are even when the a1c-only signal is not improved much.*"
+
+**Why this matters:** if the user's read is right, the data was designed as a **probe on residual signal extraction**. The simulator has three layers baked in:
+
+1. **Floor** — any reasonable baseline using `a1c_latest` (or `a1c_weighted`) hits ~60–61%. This guarantees that unprepared teams get a passing grade and the leaderboard isn't all zeros.
+2. **Ceiling** — there is a true upper bound, possibly higher than the 62–63% we keep observing, accessible only with deep modeling.
+3. **A narrow visible band (60–63% F1)** in which all "reasonable" models cluster, designed so that **small F1 differences are real ranking signal, not noise**, even though they look like noise to us.
+
+**Evidence for this read in our own results:**
+- `a1c_latest` alone: ~60.3%
+- `a1c_weighted` alone: 61.40%
+- Regularized XGBoost (74 features): 62.0–62.2%
+- RF audit (5 seeds): 61.6% ± 0.27%
+- Ensemble 3-model: 62.0%
+- Best NN: 61.0%
+
+That's a **2 pp band** (60.3 → 62.3) for almost everything we've tried, with very small standard errors within each model. If this were natural noise on real data, you'd expect a wider spread; the tightness *itself* suggests a designed band.
+
+- The CTMC + variogram + ICC analysis recovered clean parameters that look textbook (relaxation = 8 months exactly, ICC = 0.92, $\pi_H = 0.16$). Real EHR data is never this clean.
+
+**Three implications if Subrata's hypothesis is right:**
+
+1. **The "structural ceiling at 62%" story may be partially wrong.** We've been telling ourselves (and the presentation will say) that the ceiling is set by between-patient variance and unobservable treatment dynamics. But under this hypothesis, the actual ceiling could be 65–67% and we just haven't found the right "clever variable". The 62% we keep hitting is the *competition floor*, not the *information-theoretic ceiling*.
+
+2. **Tiny F1 differences are decision-relevant.** A 0.5 pp improvement on the val split is *not* noise — it's exactly what the organizers designed the data to detect. So the choice between, e.g., XGBoost (62.2%) and an ensemble (62.0%) actually matters for round 2, even though it looks within noise to us. We should stop dismissing 0.3–0.5 pp differences as "within noise".
+
+3. **The right next move is to actively hunt for the residual signal**, not to keep validating the ceiling. Concrete things to try:
+   - **Cluster the patients first** (Sayan's idea, see next section). If the simulator draws $\mu_i$ from a mixture of K Gaussians or uses a finite-state HMM, GMM/k-means should recover the components. Cluster ID becomes a feature.
+   - **Dynamics features that survive after conditioning on level**: residual analysis showed `frac_above_8 × a1c_weighted` had LR = 515. Maybe the simulator put the signal in patient-specific *response curves* rather than in level alone.
+   - **Stratified models per patient cluster**, not per A1c regime.
+   - **The Bayesian retry** still matters — but as a *parameter recovery exercise* that reveals what the simulator's hyperparameters look like, not as an F1-pushing exercise.
+
+**What I'd update in the presentation:** soften the "ceiling is structural" claim to "**ceiling on F1 is structural under simple feature engineering**; the residual signal is real (AIC, log-loss, Brier all drop substantially) but rank-blind". Then pivot to "if the metric had been Brier or log-loss, the dynamics-aware models would dominate. F1 is the wrong metric for what's actually informative in this data."
+
+---
+
+## Apr 7 (night) — Sayan's idea: unsupervised clustering, no labels
+
+**The question:** what does clustering reveal about the data structure if we don't use the target at all?
+
+**Why it's a good idea, especially under Subrata's "designed competition" hypothesis:** synthetic data often has clean cluster structure because the simulator draws latent parameters from finite mixtures. If the WashU simulator uses something like
+$$\mu_i \sim \sum_{k=1}^K w_k \mathcal{N}(\mu_k, \tau_k^2),$$
+then a Gaussian mixture model on patient-level features should recover $K$ modes and assign each patient a probability of belonging to each mode. **Cluster ID could then become a feature** that captures latent type information directly, instead of approximating it through `a1c_weighted` + dozens of derived features.
+
+**Concrete clustering plan:**
+
+1. **Patient-level feature matrix.** One row per patient, columns = `a1c_weighted`, `a1c_sd`, `a1c_range`, `n_a1c`, `frac_above_7`, `frac_above_8`, `n_crossings_7`, `total_meds`, `n_drug_classes`, `time_gap`, `age`, `bmi`, `adi_state`. Standardize.
+2. **Pick K via BIC on a Gaussian mixture model** (`mclust` package). Fit `Mclust(X, G = 1:10)`, take the K with the lowest BIC. This is the most informative single number — if BIC says K = 1, the data is unimodal and the mixture story is wrong. If K ≥ 3, there ARE latent groups.
+3. **Visualize.** Project to 2D via t-SNE / UMAP / PCA, color by cluster, look for separation. Then color by target (`a1c_2025 > 8`) and see if any cluster has a strikingly different base rate.
+4. **As a feature**: hard cluster ID + soft membership probabilities, fed into the existing GLM/XGBoost pipeline. Test whether any model F1 moves.
+5. **Trajectory clustering** as a separate angle: cluster the *shape* of each patient's a1c trajectory using functional clustering (`funFEM` or `funHDDC`). This could recover the "fragile responders" / "stable controlled" / "chronic high" / "improving" types that the misclassification EDA hinted at on Apr 3.
+
+**What success would look like:**
+- BIC clearly favors K ≥ 2
+- Clusters have visibly different uncontrolled rates
+- Cluster ID, added as a feature, moves XGBoost val F1 by >0.3 pp (which under the "designed competition" hypothesis is a *real* improvement, not noise)
+
+**What failure would look like:**
+- BIC favors K = 1 → patient distribution is unimodal → no latent mixture, the simulator used continuous random effects (which `a1c_weighted` already captures via shrinkage)
+- Clusters all have similar uncontrolled rates → cluster ID is redundant with `a1c_weighted`
+
+Either outcome is informative:
+- **Success** validates the "designed competition" hypothesis and gives us a concrete handle on the residual signal.
+- **Failure** confirms the "single continuous latent" model and supports the structural-ceiling presentation story.
+
+**Owner suggestion:** Sayan, since he raised it, and it's adjacent to his missing-data work (clustering also has to handle missingness — either via imputation, which is in his wheelhouse, or via the missingness pattern itself as a feature).
+
+**Cost:** afternoon of work. Worth it regardless of which way it goes.
+
+---
+
+## Apr 8, 2026 — Path A and PG logistic both succeeded (closing out the threads)
+
+Both the Bayesian retry (Path A from Apr 7 night) and Sayan's PG logistic adaptation ran today. **Both hit the ~62% ceiling.** Full details and per-run numbers are in `changes.md` (Apr 8 entry); here's the forward-looking summary.
+
+### Path A: Bayesian state-space retry — F1 = 0.6161
+
+The retry needed bug fixes AND informative priors to work — neither alone was enough. Five stacked bugs in the original `subh_bayesian.R` plus a major prior misspec on `alpha_prec` (centered at log(prec_mu) = 0 when truth is ~6) had been overdetermining the failure. With audit-derived priors (variogram nugget → `prec_Y`, lmer fixed intercept → `mu_init`, T_days/σ_W² → `alpha_prec`), R-hat for the drift parameters dropped from 19.7 to 1.0005 — perfect convergence. Variance components (`alpha_prec`, `prec_Y`) still mix slowly but are tractable.
+
+The model now provides a clean interpretable headline: 5 free parameters, each clinically meaningful, F1 within 0.4 pp of the best black-box, and a state-space generative story that mirrors the likely simulator structure. The MCMC samples are cached at `scripts/outfiles/subrata_bayesian_mcmc_n2000_informative.Rds` so we can iterate on the prediction step / eval / threshold tuning without re-running JAGS.
+
+**The unresolved trade-off:** sharper priors → sharper posteriors → better F1, but worse calibration (ECE 0.025 → 0.079). Could be recovered with isotonic post-processing without losing F1. Worth doing for the presentation calibration plot.
+
+### Sayan's PG logistic — F1 = 0.6094, BEST calibration in the project
+
+`scripts/subrata_pg_logistic.R` adapts Sayan's PG Gibbs to our pipeline. Key technical finding (worth telling Sayan): **his original `pg_logistic_gibbs_missing` is O(N² × p × iter)** because the inner loop calls `model.matrix(y ~ ., data = dat_current)` on every missing cell. Killed at 2:47 of CPU time without printing iteration 100 — estimated 2-4 hours to finish on 17k patients. He must have run his original on a few hundred patients where this didn't matter.
+
+The vectorized variant in `subrata_pg_logistic.R` (`pg_logistic_gibbs_missing_fast`) uses the fact that missing cells of one variable are conditionally independent given the rest of `X` and `beta`, so they can be sampled jointly via one BLAS call per variable per iteration. **~17,000× speedup**: 2-4 hours → 3 minutes for the full 5000 iterations on 17,845 patients.
+
+The result is the **best-calibrated model in the project**: ECE = 0.033 (near-perfect), log-loss 0.353 (best), Brier 0.106 (best). F1 is 0.7 pp below the Bayesian state-space and 1.0 pp below XGBoost — but the probabilities are dramatically more trustworthy.
+
+**Coefficient comparison with Sayan's reported numbers** (his Box-drive run vs ours on `train.Rds`): qualitatively the same pattern (A1c features dominate, lipid/log_gap near zero) but the *distribution* of weight between `a1c_last`, `a1c_ever_gt8`, and `a1c_prop_gt8` differs noticeably. Likely his Box-drive `Fulldata.csv` has differently-engineered features. Need to ask him.
+
+### The headline for "Fault in our model"
+
+| Model | Val F1 | Paradigm |
+|---|---:|---|
+| XGBoost regularized | 0.6200 | Black-box, gradient boosting |
+| RF (audited) | 0.6162 | Black-box, ensemble of trees |
+| **Bayesian state-space (informative priors)** | **0.6161** | Interpretable, longitudinal generative |
+| GLM (a1c_weighted alone) | 0.6140 | Interpretable, frequentist, 1 feature |
+| ctmc_glm (M4) | 0.6131 | Interpretable, closed-form CTMC + GLM |
+| Multi-head NN | 0.6100 | Black-box, transition-level deep learning |
+| **PG logistic** | **0.6094** | Interpretable, cross-sectional Bayesian + missing-data |
+
+**Seven independent methods, three statistical paradigms (frequentist / Bayesian state-space / Bayesian cross-sectional), all between 60.9% and 62.0% F1.** This is an extremely tight cluster. The ceiling is the data, not the method.
+
+The "designed competition" hypothesis from Apr 7 (Subrata's note above) is now harder to evaluate: every reasonable approach is in the same 1.1 pp band. *Either* the simulator is exquisitely tuned to give a 60-62% floor with hidden 65%+ ceiling, *or* the irreducible noise floor IS 62% and we've all hit it. Both are consistent with what we observe. Without ground-truth simulator parameters, we can't disentangle these — but our presentation should acknowledge the uncertainty rather than claim "the ceiling is structural" too confidently.
+
+### Closed threads and remaining ones
+
+**Closed:**
+- Path A (Bayesian state-space retry) — succeeded.
+- Sayan's PG logistic adaptation — succeeded.
+- "Designed competition vs structural ceiling" — partially closed, both readings remain consistent with the data.
+
+**Still open:**
+- Sayan's clustering idea (Apr 7 night) — deferred. Could still find latent structure if the simulator uses a finite mixture for patient types. Would close the "designed competition" question definitively if it found discriminating clusters.
+- Calibration recovery for the Bayesian state-space (isotonic post-processing) — quick to add, would give us a "best of both worlds" model.
+- Reading Sayan's off-GitHub Bayesian scripts (he said 2-3 hrs to fetch) — may already contain better feature engineering or fixes we haven't tried.

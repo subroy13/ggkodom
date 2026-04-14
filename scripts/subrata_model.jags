@@ -1,0 +1,71 @@
+## Subrata-prefixed copy of scripts/model.jags with INFORMATIVE PRIORS
+## centered on the empirical estimates from the audit work (lmer + variogram + CTMC).
+##
+## The originals in scripts/model.jags use diffuse priors that are catastrophically
+## misaligned with where the truth lives:
+##   - alpha_prec ~ N(0, prec=0.25)        --> log(prec_mu) ~ N(0, sd=2)
+##     But the data wants log(prec_mu) ~ 6 (since prec_mu ~ T_days / sigma_W^2 ~ 547/1.35 ~ 405)
+##     The prior puts ZERO mass on the truth and the chains have to fight 6 SDs uphill.
+##     This is the single biggest cause of the psrf > 10 we saw.
+##   - prec_Y ~ Gamma(0.01, 0.01)          --> "weakly informative" textbook trap
+##     Has nearly all its mass at very small or very large values, notorious
+##     for poor mixing in hierarchical models. Variogram nugget gives prec_Y ~ 0.85.
+##   - mu_init ~ N(7.0, prec=0.5)          --> sd = 1.41, fine but loose
+##     lmer fixed intercept is 7.11 with much smaller uncertainty.
+##
+## New priors (centered on audit estimates, tight enough to constrain mixing
+## but not so tight as to override the data):
+##   prec_Y       ~ Gamma(8, 10)        mean = 0.80, sd ≈ 0.28      (variogram nugget ~ 1.18, so 1/nugget ~ 0.85)
+##   alpha_delta  ~ Normal(0.4, prec=1) median delta ~ 1.5 A1c units (clinical treatment effect)
+##   alpha_prec   ~ Normal(6.0, prec=1) median prec_mu ~ 400 per day (matches T_days/sigma_W^2)
+##   beta_delta   ~ Normal(0, prec=4)   sd=0.5 (tighter than original sd=1)
+##   beta_prec    ~ Normal(0, prec=4)
+##   mu_init      ~ Normal(7.11, prec=2) sd ≈ 0.71 (matches lmer fixed intercept estimate)
+
+model {
+  # ----------------
+  # Define the priors (INFORMATIVE — see header for derivation)
+  # ----------------
+  prec_Y ~ dgamma(8, 10)
+
+  alpha_delta ~ dnorm(0.4, 1)
+  alpha_prec  ~ dnorm(6.0, 1)
+
+  for (v in 1:p) {
+    beta_delta[v] ~ dnorm(0, 4)
+    beta_prec[v]  ~ dnorm(0, 4)
+  }
+
+  # ----------------
+  # Patient initialization (mu_pop = 7.11 from lmer)
+  # ----------------
+  for (i in 1:N_patients) {
+    mu_init[i] ~ dnorm(7.11, 2)
+
+    log(delta[i])   <- alpha_delta + inprod(X[i, ], beta_delta)
+    log(prec_mu[i]) <- alpha_prec  + inprod(X[i, ], beta_prec)
+  }
+
+  # ---------------------------------------------------------
+  # 1. First Observations ONLY
+  # ---------------------------------------------------------
+  for (i in 1:N_patients) {
+    mu[first_idx[i]] ~ dnorm(mu_init[i], prec_mu[i])
+  }
+
+  # ---------------------------------------------------------
+  # 2. Subsequent Observations ONLY (Markov Transitions)
+  # ---------------------------------------------------------
+  for (j in 1:N_subseq) {
+    expected_mu[subseq_idx[j]] <- mu[subseq_idx[j]-1] - (delta[id[subseq_idx[j]]] * med_flag[subseq_idx[j]])
+    mu[subseq_idx[j]] ~ dnorm(expected_mu[subseq_idx[j]], prec_mu[id[subseq_idx[j]]] / dt[subseq_idx[j]])
+  }
+
+  # ---------------------------------------------------------
+  # 3. Observation Likelihood
+  # ---------------------------------------------------------
+  for (k in 1:N_total) {
+    Y[k] ~ dnorm(mu[k], prec_Y)
+    is_above_A[k] ~ dinterval(Y[k], A_star)
+  }
+}

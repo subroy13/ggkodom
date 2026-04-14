@@ -50,12 +50,14 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-<<<<<<< HEAD
 # DS_Store
 .DS_Store
-=======
 
-# Subrata added:
+# R interactive plots that get dumped at project root
+Rplots.pdf
+/scripts/Rplots.pdf
 CLAUDE.md
+scripts/outfiles/
 
->>>>>>> 59dbdba72dc780996608af0623c1fce7e50407be
+# Claude Code session caveat captures
+*-local-command-caveatcaveat-the-messages-below.txt
