@@ -1,0 +1,7 @@
+kodom_circular          Circular trajectory plot — the Kodom
+kodom_colors            Kodom color palette
+kodom_heatmap           Heatmap trajectory plot
+kodom_state             State-ribbon trajectory plot
+kodom_swimlane          Swimlane trajectory plot
+theme_kodom             Clean theme for ggkodom linear plots
+theme_kodom_circular    Theme for circular ggkodom plots

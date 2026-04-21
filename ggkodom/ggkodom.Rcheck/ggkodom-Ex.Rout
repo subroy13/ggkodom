@@ -1,0 +1,152 @@
+
+R version 4.5.3 (2026-03-11) -- "Reassured Reassurer"
+Copyright (C) 2026 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> pkgname <- "ggkodom"
+> source(file.path(R.home("share"), "R", "examples-header.R"))
+> options(warn = 1)
+> library('ggkodom')
+> 
+> base::assign(".oldSearch", base::search(), pos = 'CheckExEnv')
+> base::assign(".old_wd", base::getwd(), pos = 'CheckExEnv')
+> cleanEx()
+> nameEx("kodom_circular")
+> ### * kodom_circular
+> 
+> flush(stderr()); flush(stdout())
+> 
+> ### Name: kodom_circular
+> ### Title: Circular trajectory plot — the Kodom
+> ### Aliases: kodom_circular
+> 
+> ### ** Examples
+> 
+> set.seed(42)
+> n_subj <- 40
+> df <- data.frame(
++   id    = rep(seq_len(n_subj), each = 5),
++   time  = rep(seq(0, 120, 30), n_subj),
++   value = rnorm(n_subj * 5, 7, 1.5)
++ )
+> kodom_circular(df, n_sample = 40)
+> 
+> 
+> 
+> cleanEx()
+> nameEx("kodom_colors")
+> ### * kodom_colors
+> 
+> flush(stderr()); flush(stdout())
+> 
+> ### Name: kodom_colors
+> ### Title: Kodom color palette
+> ### Aliases: kodom_colors
+> 
+> ### ** Examples
+> 
+> kodom_colors()
+[1] "#008d98" "#ffcc3d" "#d7433b"
+> kodom_colors(7)
+[1] "#008D98" "#55A279" "#AAB75B" "#FFCC3D" "#F19E3C" "#E4703B" "#D7433B"
+> 
+> 
+> 
+> cleanEx()
+> nameEx("kodom_heatmap")
+> ### * kodom_heatmap
+> 
+> flush(stderr()); flush(stdout())
+> 
+> ### Name: kodom_heatmap
+> ### Title: Heatmap trajectory plot
+> ### Aliases: kodom_heatmap
+> 
+> ### ** Examples
+> 
+> set.seed(42)
+> df <- data.frame(
++   id    = rep(1:30, each = 8),
++   time  = rep(seq(0, 210, 30), 30),
++   value = rnorm(240, 7, 1.5)
++ )
+> kodom_heatmap(df, n_sample = 30, time_bins = 7)
+> 
+> 
+> 
+> cleanEx()
+> nameEx("kodom_state")
+> ### * kodom_state
+> 
+> flush(stderr()); flush(stdout())
+> 
+> ### Name: kodom_state
+> ### Title: State-ribbon trajectory plot
+> ### Aliases: kodom_state
+> 
+> ### ** Examples
+> 
+> set.seed(42)
+> df <- data.frame(
++   id    = rep(1:20, each = 5),
++   time  = rep(seq(0, 120, 30), 20),
++   value = rnorm(100, 7, 1.5)
++ )
+> kodom_state(df, thresholds = c(6.5, 8))
+> 
+> 
+> 
+> cleanEx()
+> nameEx("kodom_swimlane")
+> ### * kodom_swimlane
+> 
+> flush(stderr()); flush(stdout())
+> 
+> ### Name: kodom_swimlane
+> ### Title: Swimlane trajectory plot
+> ### Aliases: kodom_swimlane
+> 
+> ### ** Examples
+> 
+> set.seed(42)
+> df <- data.frame(
++   id    = rep(1:20, each = 5),
++   time  = rep(seq(0, 120, 30), 20),
++   value = rnorm(100, 7, 1.5)
++ )
+> kodom_swimlane(df)
+> 
+> # With color anchored at clinical thresholds
+> kodom_swimlane(df, color_breaks = c(5, 7, 10))
+> 
+> 
+> 
+> ### * <FOOTER>
+> ###
+> cleanEx()
+> options(digits = 7L)
+> base::cat("Time elapsed: ", proc.time() - base::get("ptime", pos = 'CheckExEnv'),"\n")
+Time elapsed:  3.727 0.117 3.897 0 0 
+> grDevices::dev.off()
+null device 
+          1 
+> ###
+> ### Local variables: ***
+> ### mode: outline-minor ***
+> ### outline-regexp: "\\(> \\)?### [*]+" ***
+> ### End: ***
+> quit('no')
