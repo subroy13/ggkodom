@@ -1,4 +1,4 @@
-#### KODOM_PERTURBATION — RAMSAY-SILVERMAN PLUS/MINUS PLOT ####
+#### KODOM_PERTURBATION -- RAMSAY-SILVERMAN PLUS/MINUS PLOT ####
 
 #' Mean +/- c * sqrt(lambda_k) * phi_k(t) perturbation plot
 #'
@@ -17,7 +17,7 @@
 #'
 #' @param fit An FPCA fit object.
 #' @param K Number of components to plot (default = all).
-#' @param sd_mult \eqn{c} in the formula above (default 2 — i.e.\ a 2-SD
+#' @param sd_mult \eqn{c} in the formula above (default 2, i.e.\ a 2-SD
 #'   perturbation in score space).
 #' @param show_pve Annotate each panel with proportion of variance
 #'   explained (default \code{TRUE}).
@@ -54,7 +54,12 @@ kodom_perturbation.fpca.sc <- function(fit, ...) kodom_perturbation_impl(fit, ..
 
 #' @rdname kodom_perturbation
 #' @export
-kodom_perturbation.FPCA    <- function(fit, ...) kodom_perturbation_impl(fit, ...)
+kodom_perturbation.FPCA    <- function(fit, K = NULL, sd_mult = 2,
+                                       show_pve = TRUE, line_width = 1,
+                                       colors = NULL, ...) {
+  kodom_perturbation_impl(fit, K = K, sd_mult = sd_mult, show_pve = show_pve,
+                          line_width = line_width, colors = colors, ...)
+}
 
 
 #### SHARED IMPLEMENTATION ####
@@ -65,7 +70,7 @@ kodom_perturbation_impl <- function(fit, K = NULL, sd_mult = 2,
                                     colors = NULL, ...) {
   ext <- fpca_extract(fit)
   if (is.null(ext$mu) || is.null(ext$phi) || is.null(ext$lambdas)) {
-    stop("fit needs mu / phi / lambdas — for refund, refit with var = TRUE.",
+    stop("fit needs mu / phi / lambdas -- for refund, refit with var = TRUE.",
          call. = FALSE)
   }
   draw_perturbation(mu = ext$mu, phi = ext$phi, lambdas = ext$lambdas,
@@ -108,9 +113,9 @@ draw_perturbation <- function(mu, phi, lambdas, args,
   long_df$kind     <- factor(long_df$kind, levels = c("minus", "mean", "plus"))
 
   legend_labels <- c(
-    minus = sprintf("μ − %g√λ·φ", sd_mult),
-    mean  = "μ(t)",
-    plus  = sprintf("μ + %g√λ·φ", sd_mult)
+    minus = sprintf("\u03bc \u2212 %g\u221a\u03bb\u00b7\u03c6", sd_mult),
+    mean  = "\u03bc(t)",
+    plus  = sprintf("\u03bc + %g\u221a\u03bb\u00b7\u03c6", sd_mult)
   )
 
   ggplot2::ggplot(long_df,

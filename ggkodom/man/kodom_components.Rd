@@ -13,12 +13,23 @@ kodom_components(fit, ...)
 
 \method{kodom_components}{fpca.sc}(fit, ...)
 
-\method{kodom_components}{FPCA}(fit, ...)
+\method{kodom_components}{FPCA}(
+  fit,
+  K = NULL,
+  overlay = FALSE,
+  show_pve = TRUE,
+  colors = NULL,
+  line_width = 1,
+  show_mean = FALSE,
+  boot_fits = NULL,
+  boot_alpha = 0.15,
+  ...
+)
 }
 \arguments{
 \item{fit}{An FPCA fit object.}
 
-\item{...}{Currently unused.}
+\item{...}{Passed to method.}
 
 \item{K}{Number of components to plot.  \code{NULL} = all retained.}
 

@@ -1,4 +1,6 @@
-*.Rcheck
+*.Rcheck/
+*.tar.gz
+*-Ex.pdf
 inst/doc
 /doc/
 /Meta/

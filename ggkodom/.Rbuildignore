@@ -8,3 +8,9 @@
 ^tests/visual_check\.pdf$
 ^doc$
 ^Meta$
+^\.claude$
+^ggkodom\.Rcheck$
+^ggkodom.*\.tar\.gz$
+^ggkodom-Ex\.pdf$
+^TODO\.md$
+^action_items\.md$

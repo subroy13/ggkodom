@@ -33,7 +33,8 @@ produce \code{k + 1} bands.  Colors are auto-expanded from the
 }
 \examples{
 \dontrun{
-  kodom_swimlane(df) + kodom_step_scale("color",
-                                        color_breaks = c(5.5, 7, 8, 10))
+kodom_swimlane(df) + kodom_step_scale("color",
+  color_breaks = c(5.5, 7, 8, 10)
+)
 }
 }

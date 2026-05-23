@@ -64,7 +64,7 @@ kodom_fit.default <- function(fit, ...) {
 #' @param re_form Random-effect formula passed through to \code{predict()}.
 #'   Default \code{NULL} = include all random effects (subject-specific curves).
 #'   Use \code{NA} for the population-level (fixed-effect-only) prediction.
-#' @param n_sample,sort_by,colors,color_breaks,point_size,line_width,alpha,seed
+#' @param n_sample,sort_by,colors,color_breaks,discretize,point_size,line_width,alpha,seed
 #'   See \code{\link{kodom_swimlane}}.
 #' @export
 kodom_fit.lmerMod <- function(fit, id, time, value = NULL,

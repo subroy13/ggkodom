@@ -18,7 +18,7 @@ kodom_state(
   outcome = NULL,
   outcome_label = "*",
   point_size = 3,
-  line_width = 1.2,
+  line_width = 0.7,
   alpha = 0.8,
   facet_rows = NULL,
   facet_cols = NULL,
@@ -48,12 +48,11 @@ Auto-generated from \code{thresholds} when \code{NULL}.}
 Auto-generated when \code{NULL}.}
 
 \item{n_sample}{Max number of subjects to display.  \code{NULL} = all.
-Default 50; consider raising for \code{geom = "tile"}.}
+Default 50.}
 
 \item{sort_by}{Order subjects by their \code{"first"}, \code{"last"},
 \code{"mean"}, or \code{"median"} value, OR a named numeric vector
-(e.g. from \code{\link{kodom_sort_scores}}).  \code{NULL} (default)
-picks \code{"first"} for path and \code{"mean"} for tile.}
+(e.g.\ from \code{\link{kodom_sort_scores}}).  Default \code{"first"}.}
 
 \item{outcome}{Column name (string) for binary outcome.
 Positive subjects get \code{outcome_label} on the y-axis.  Ignored
@@ -61,13 +60,11 @@ when \code{coord = "polar"} (no y-axis text).}
 
 \item{outcome_label}{Marker for positive outcomes (default \code{"*"}).}
 
-\item{point_size}{Point size.  \code{NULL} (default) picks 3 for
-linear paths, 2 for polar paths, and 0 (no points) for tiles.}
+\item{point_size}{Point size (default 3).}
 
-\item{line_width}{Segment width (default 1.2 — slightly thicker than
-swimlane to emphasize discrete bands).}
+\item{line_width}{Segment width (default 0.7).}
 
-\item{alpha}{Line transparency (default 0.7).  Ignored for tiles.}
+\item{alpha}{Segment transparency (default 0.8).}
 
 \item{facet_rows, facet_cols}{Column names for row/column faceting
 (\code{NULL} = none).}

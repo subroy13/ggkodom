@@ -60,7 +60,15 @@ kodom_residuals.default <- function(fit, ...) {
 #' @export
 kodom_residuals.lmerMod <- function(fit, data = NULL,
                                     id = "id", time = "time", value = NULL,
-                                    ...) {
+                                    signed_breaks = c(-2, 0, 2),
+                                    colors = c("#2c7fb8", "grey92", "#d7301f"),
+                                    discretize = FALSE,
+                                    n_sample = 50, sort_by = NULL,
+                                    outcome = NULL, outcome_label = "*",
+                                    point_size = 3, line_width = 0.8,
+                                    alpha = 0.7,
+                                    facet_rows = NULL, facet_cols = NULL,
+                                    seed = 123, ...) {
   if (!requireNamespace("lme4", quietly = TRUE)) {
     stop("Package 'lme4' required.", call. = FALSE)
   }
@@ -68,7 +76,14 @@ kodom_residuals.lmerMod <- function(fit, data = NULL,
   if (is.null(value)) value <- response_name(stats::formula(fit))
   pred <- stats::predict(fit, newdata = data, re.form = NULL,
                          allow.new.levels = TRUE)
-  draw_residual_swimlane(data, pred, id, time, value, ...)
+  draw_residual_swimlane(data, pred, id, time, value,
+                         signed_breaks = signed_breaks, colors = colors,
+                         discretize = discretize, n_sample = n_sample,
+                         sort_by = sort_by, outcome = outcome,
+                         outcome_label = outcome_label,
+                         point_size = point_size, line_width = line_width,
+                         alpha = alpha, facet_rows = facet_rows,
+                         facet_cols = facet_cols, seed = seed)
 }
 
 #' @rdname kodom_residuals
@@ -90,6 +105,8 @@ kodom_residuals.glmerMod <- function(fit, data = NULL,
 #### GAM ####
 
 #' @rdname kodom_residuals
+#' @param type Prediction scale for GAMs: \code{"response"} (default)
+#'   or \code{"link"}.
 #' @export
 kodom_residuals.gam <- function(fit, data = NULL,
                                 id = "id", time = "time", value = NULL,

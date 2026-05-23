@@ -19,13 +19,14 @@ kodom_swimlane(
   outcome = NULL,
   outcome_label = "*",
   point_size = NULL,
-  line_width = 0.8,
+  line_width = 0.5,
   alpha = 0.7,
   facet_rows = NULL,
   facet_cols = NULL,
   time_bins = 10,
   time_breaks = NULL,
   agg_fun = c("mean", "median", "first", "last", "min", "max"),
+  arc_degrees = 360,
   gap_fraction = 0.15,
   inner_fraction = 0.3,
   direction = 1,
@@ -75,7 +76,7 @@ when \code{coord = "polar"} (no y-axis text).}
 \item{point_size}{Point size.  \code{NULL} (default) picks 3 for
 linear paths, 2 for polar paths, and 0 (no points) for tiles.}
 
-\item{line_width}{Line width (default 0.8).  Ignored for tiles.}
+\item{line_width}{Line width (default 0.5).  Ignored for tiles.}
 
 \item{alpha}{Line transparency (default 0.7).  Ignored for tiles.}
 
@@ -93,8 +94,14 @@ when \code{geom = "tile"}.  Overrides \code{time_bins}.}
 \code{"median"}, \code{"first"}, \code{"last"}, \code{"min"}, or
 \code{"max"}.  Used only when \code{geom = "tile"}.}
 
+\item{arc_degrees}{Angular extent of the polar layout, in degrees
+(default 360 = full circle).  Use e.g.\ \code{arc_degrees = 270} for a
+fan layout that preserves ordering without a wrap seam.  When less
+than 360, this overrides \code{gap_fraction}.  Polar only.}
+
 \item{gap_fraction}{Fraction of the circle left empty as a visual gap
-at the ordering seam (default 0.15).  Polar only.}
+at the ordering seam (default 0.15).  Polar only; overridden when
+\code{arc_degrees < 360}.}
 
 \item{inner_fraction}{Fraction of the time range used as a hollow
 inner buffer so short-follow-up subjects remain visible (default 0.3).

@@ -12,7 +12,27 @@
 \usage{
 kodom_residuals(fit, ...)
 
-\method{kodom_residuals}{lmerMod}(fit, data = NULL, id = "id", time = "time", value = NULL, ...)
+\method{kodom_residuals}{lmerMod}(
+  fit,
+  data = NULL,
+  id = "id",
+  time = "time",
+  value = NULL,
+  signed_breaks = c(-2, 0, 2),
+  colors = c("#2c7fb8", "grey92", "#d7301f"),
+  discretize = FALSE,
+  n_sample = 50,
+  sort_by = NULL,
+  outcome = NULL,
+  outcome_label = "*",
+  point_size = 3,
+  line_width = 0.8,
+  alpha = 0.7,
+  facet_rows = NULL,
+  facet_cols = NULL,
+  seed = 123,
+  ...
+)
 
 \method{kodom_residuals}{glmerMod}(fit, data = NULL, id = "id", time = "time", value = NULL, ...)
 
@@ -53,6 +73,9 @@ residuals.  Default = blue / grey / red.}
 \code{TRUE} = step bands at \code{signed_breaks}.}
 
 \item{n_sample, sort_by, point_size, line_width, alpha, seed, outcome, outcome_label, facet_rows, facet_cols}{See \code{\link{kodom_swimlane}}.}
+
+\item{type}{Prediction scale for GAMs: \code{"response"} (default)
+or \code{"link"}.}
 }
 \value{
 A \code{ggplot} object.

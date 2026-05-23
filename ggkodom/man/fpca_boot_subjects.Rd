@@ -21,7 +21,7 @@ fpca_boot_subjects(
 
 \item{B}{Number of bootstrap replicates (default 50).}
 
-\item{refit_fn}{A function \code{function(data) -> FPCA fit object}.
+\item{refit_fn}{A \code{function(data)} that returns an FPCA fit object.
 Required.}
 
 \item{seed}{Random seed.}

@@ -150,7 +150,7 @@ Use \code{NA} for the population-level (fixed-effect-only) prediction.}
 
 \item{show_points}{Overlay raw observations as points (default \code{TRUE}).}
 
-\item{n_sample, sort_by, colors, color_breaks, point_size, line_width, alpha, seed}{See \code{\link{kodom_swimlane}}.}
+\item{n_sample, sort_by, colors, color_breaks, discretize, point_size, line_width, alpha, seed}{See \code{\link{kodom_swimlane}}.}
 
 \item{type}{Prediction scale for GAMs: \code{"response"} (default)
 or \code{"link"}.}

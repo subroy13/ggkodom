@@ -30,7 +30,7 @@
 #' @param pc Length-2 integer vector picking the PCs for the x and y
 #'   axes (default \code{c(1, 2)}).
 #' @param glyph_size Half-width of each glyph as a fraction of the
-#'   score-axis range (default 0.05 = 5\% of axis on each side).
+#'   score-axis range (default 0.05 = 5 percent of axis on each side).
 #' @param glyph_colors Named character vector \code{c(varname = color)} for
 #'   per-variable line colors.  \code{NULL} (default) auto-picks a
 #'   colorblind-friendly palette (\code{"Dark2"} for 2–8 variables).

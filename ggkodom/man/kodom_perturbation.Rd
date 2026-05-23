@@ -13,16 +13,24 @@ kodom_perturbation(fit, ...)
 
 \method{kodom_perturbation}{fpca.sc}(fit, ...)
 
-\method{kodom_perturbation}{FPCA}(fit, ...)
+\method{kodom_perturbation}{FPCA}(
+  fit,
+  K = NULL,
+  sd_mult = 2,
+  show_pve = TRUE,
+  line_width = 1,
+  colors = NULL,
+  ...
+)
 }
 \arguments{
 \item{fit}{An FPCA fit object.}
 
-\item{...}{Currently unused.}
+\item{...}{Passed to method.}
 
 \item{K}{Number of components to plot (default = all).}
 
-\item{sd_mult}{\eqn{c} in the formula above (default 2 — i.e.\ a 2-SD
+\item{sd_mult}{\eqn{c} in the formula above (default 2, i.e.\ a 2-SD
 perturbation in score space).}
 
 \item{show_pve}{Annotate each panel with proportion of variance

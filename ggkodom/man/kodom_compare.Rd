@@ -2,7 +2,7 @@
 % Please edit documentation in R/kodom_compare.R
 \name{kodom_compare}
 \alias{kodom_compare}
-\title{Side-by-side raw observations and fitted-curve swimlanes}
+\title{Compare raw observations against a model's fitted curves}
 \usage{
 kodom_compare(
   fit,
@@ -10,6 +10,7 @@ kodom_compare(
   id = "id",
   time = "time",
   value = NULL,
+  layout = c("overlay", "side"),
   n_grid = 60,
   panel_labels = c("raw", "fit"),
   ...
@@ -25,29 +26,36 @@ For lmer/gam, defaults to the model frame stored in \code{fit}.}
 \item{id, time, value}{Column names (strings).  \code{value} defaults
 to the LHS of \code{formula(fit)} for lmer/gam.}
 
+\item{layout}{\code{"overlay"} (default) or \code{"side"}.}
+
 \item{n_grid}{Per-subject prediction-grid resolution (default 60).}
 
 \item{panel_labels}{Length-2 character vector for the panel strip
-labels.  Default \code{c("raw", "fit")}.}
+labels (\code{layout = "side"} only).  Default \code{c("raw", "fit")}.}
 
-\item{...}{Passed through to \code{\link{kodom_swimlane}} for cosmetic
-controls (\code{n_sample}, \code{sort_by}, \code{colors},
-\code{color_breaks}, \code{discretize}, \code{point_size},
-\code{line_width}, \code{alpha}, \code{facet_rows}, \code{seed}).}
+\item{...}{Passed through to the drawer for cosmetic controls
+(\code{n_sample}, \code{sort_by}, \code{colors}, \code{color_breaks},
+\code{discretize}, \code{point_size}, \code{line_width}, \code{alpha},
+\code{facet_rows}, \code{seed}).}
 }
 \value{
-A \code{ggplot} object with two facets.
+A \code{ggplot} object.
 }
 \description{
-Two panels: the left shows the raw data (one point per observation,
-one lane per subject); the right shows the model's fitted curves
-on a dense grid.  Both panels share the same lane ordering and the
-same color scale, so visual comparison is direct.
+Two visual idioms for the "what did the smoother buy you" picture:
+\describe{
+\item{\code{layout = "overlay"} (default)}{Raw points and the fitted
+curve share a single set of lanes.  Both are colored on the same
+value scale, so a residual reads off as a color mismatch between a
+raw point and the underlying fit line.  Compact and direct.}
+\item{\code{layout = "side"}}{Two side-by-side panels — raw points on
+the left, fit curves on the right — sharing lane ordering and color
+scale.  Better when the overlay would be too dense.}
+}
 }
 \details{
-This is the "what did the smoother buy you" picture.  Sorting by
-an FPC score (\code{sort_by = kodom_sort_scores(fp)}) and faceting
-by a cluster (\code{facet_rows = "cluster"}) is the canonical
+Sorting by an FPC score (\code{sort_by = kodom_sort_scores(fp)}) and
+faceting by a cluster (\code{facet_rows = "cluster"}) is the canonical
 diagnostic.
 }
 \examples{
@@ -59,5 +67,6 @@ diagnostic.
   cl  <- cluster_scores(fp, k = 3)
   df$cluster <- cl[as.character(df$id)]
   kodom_compare(fp, df, sort_by = key, facet_rows = "cluster")
+  kodom_compare(fp, df, layout = "side", sort_by = key)
 }
 }

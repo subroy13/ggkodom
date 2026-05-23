@@ -2,7 +2,7 @@
 ##
 ## A small adapter layer so the visualization functions don't need to
 ## branch on refund vs fdapace.  Add a new backend by writing one
-## fpca_extract() branch — every viz function picks it up for free.
+## fpca_extract() branch -- every viz function picks it up for free.
 
 #' Extract everything a kodom FPCA viz function needs from a fit
 #'
@@ -25,7 +25,7 @@ fpca_extract <- function(fit) {
   if (inherits(fit, c("fpca", "fpca.sc"))) {
     phi  <- fit$efunctions
     if (is.null(phi)) {
-      stop("fit$efunctions is missing — this doesn't look like a refund FPCA fit.",
+      stop("fit$efunctions is missing -- this doesn't look like a refund FPCA fit.",
            call. = FALSE)
     }
     args <- if (!is.null(fit$argvals)) fit$argvals else seq_len(nrow(phi))
@@ -86,8 +86,7 @@ pc_label_factor <- function(pcs, pve, show_pve = TRUE) {
 }
 
 
-#' Tiny null-coalescing operator (avoids a rlang dependency for one use)
-#' @keywords internal
+## Tiny null-coalescing operator (avoids a rlang dependency for one use)
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
 
