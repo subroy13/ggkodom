@@ -107,3 +107,45 @@ kodom_value_scale <- function(aesthetic = c("color", "fill"),
     kodom_gradient_scale(aesthetic, colors, color_breaks, name)
   }
 }
+
+
+#' Kodom color scale for the colour aesthetic
+#'
+#' A standard ggplot2-named scale that wraps the kodom gradient and step
+#' palettes.  Designed to compose with \code{\link{geom_kodom}}:
+#' \preformatted{ggplot(df, aes(x = time, y = id, colour = value)) +
+#'   geom_kodom() +
+#'   scale_color_kodom()}
+#'
+#' @inheritParams kodom_gradient_scale
+#' @param discretize \code{FALSE} (default) = smooth gradient;
+#'   \code{TRUE} = step bands at \code{color_breaks}.
+#' @param ... Ignored.
+#' @return A ggplot2 scale object.
+#' @export
+scale_color_kodom <- function(colors = kodom_colors(),
+                              color_breaks = NULL,
+                              name = ggplot2::waiver(),
+                              discretize = FALSE,
+                              ...) {
+  nm <- if (inherits(name, "waiver")) "value" else name
+  kodom_value_scale("color", colors, color_breaks, name = nm, discretize = discretize)
+}
+
+#' @rdname scale_color_kodom
+#' @export
+scale_colour_kodom <- scale_color_kodom
+
+#' Kodom color scale for the fill aesthetic
+#'
+#' @inheritParams scale_color_kodom
+#' @return A ggplot2 scale object.
+#' @export
+scale_fill_kodom <- function(colors = kodom_colors(),
+                             color_breaks = NULL,
+                             name = ggplot2::waiver(),
+                             discretize = FALSE,
+                             ...) {
+  nm <- if (inherits(name, "waiver")) "value" else name
+  kodom_value_scale("fill", colors, color_breaks, name = nm, discretize = discretize)
+}

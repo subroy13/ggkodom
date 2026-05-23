@@ -19,6 +19,20 @@ A small ggplot2-based toolkit for individual-level longitudinal data, with optio
 | `kodom_multi()` | **(polar view)** Multivariate kodom — each subject = one spoke, spoke split into J radial bands (one per variable). Time radial within band. Color = z-score per variable on a single gradient. Genuine multivariate extension of the flower. |
 | `kodom_state()` | Like swimlane but segments colored by discrete state (threshold-based). Thin wrapper-style helper. |
 
+### ggplot2 extension layer (composable API)
+
+| Function | Description |
+|---|---|
+| `geom_kodom()` | ggplot2 geom: one path per subject, sorted/sampled via `StatKodom`. Returns layer + `scale_y_discrete()`. Compose with `+` like any ggplot2 geom. |
+| `geom_kodom_tile()` | Heatmap variant: tiles binned by `time_bins`/`time_breaks`, aggregated by `agg_fun`. Uses `fill` aesthetic. |
+| `stat_kodom()` | Standalone stat for pairing kodom sorting/sampling with any geom (e.g. `geom_path(stat = "kodom")`). |
+| `scale_color_kodom()` / `scale_colour_kodom()` | Continuous color scale wrapping the kodom teal→gold→red palette. `discretize = TRUE` for step bands. |
+| `scale_fill_kodom()` | Same as above, for the fill aesthetic. |
+| `StatKodom` | ggproto Stat — subject sampling (`n_sample`), sorting (`sort_by`), y-factoring. All logic in `setup_data()`. |
+| `StatKodomTile` | ggproto Stat extending StatKodom — adds time binning (`time_bins`/`time_breaks`) and value aggregation (`agg_fun`). |
+| `GeomKodomPath` | ggproto Geom extending GeomPath — path + optional observation points (`point_size`). |
+| `GeomKodomTile` | ggproto Geom extending GeomRect — tiles with white borders, computes rect boundaries from factor y. |
+
 The earlier `kodom_circular()` and `kodom_heatmap()` collapsed into `kodom_swimlane()`.
 
 ### FDA / model-fit views
@@ -48,7 +62,7 @@ All trajectory functions accept a long-format data frame with (id, time, value) 
 - **`discretize` flag** on swimlane / fit (and the underlying `kodom_value_scale`): smoothed-fit colors otherwise wash out into a single hue. Stepped bands at clinical thresholds keep the picture readable.
 - **Subject-level (cluster) bootstrap**, not observation-level — the only correct resampling unit for sparse irregular longitudinal data. Eigenfunction sign-aligned against the reference fit before drawing.
 - **Circular ordering problem**: angular layout sorts subjects clockwise; `gap_fraction` leaves an empty arc at the wrap point so the seam is visible. `arc_degrees` (default 360) lets the user collapse the layout to a fan (e.g. 270, 180) — the missing arc IS the gap, so ordering is preserved without a wrap seam.
-- **Start with wrappers (A), not custom geoms (B)** — each function returns a complete ggplot. Graduate to `geom_kodom()` etc. if there's demand.
+- **Architecture: moving from wrappers to ggplot2 grammar.** Started with wrappers (`kodom_swimlane()` etc.) that return complete ggplots. Now graduating to `geom_kodom()` + `scale_color_kodom()` + `theme_kodom()` composable API. Long-term direction: only `geom_*` / `scale_*` / `stat_*` / `theme_*` names are exported; wrappers become internal or deprecated.
 
 ## Package structure
 
@@ -56,8 +70,9 @@ All trajectory functions accept a long-format data frame with (id, time, value) 
 R/
   ggkodom-package.R    # package doc + .data import
   utils.R              # prep_trajectory_data(), check_columns(), build_facet()
-  colors.R             # kodom_colors(), kodom_gradient_scale(), kodom_step_scale()
+  colors.R             # kodom_colors(), kodom_gradient_scale(), kodom_step_scale(), scale_color_kodom(), scale_fill_kodom()
   theme_kodom.R        # theme_kodom(), theme_kodom_circular()
+  geom_kodom.R         # StatKodom, GeomKodomPath, geom_kodom(), stat_kodom()
   kodom_swimlane.R     # path/tile × linear/polar (workhorse)
   kodom_state.R        # discrete-state ribbon
   kodom_fit.R          # generic + lmer/gam/FPCA methods → smoothed swimlanes
@@ -81,7 +96,9 @@ Interested-but-not-yet:
 - Linked plotly/crosstalk between `kodom_scores` and `kodom_swimlane`.
 
 Maybe later:
-- Custom geoms (`geom_swimlane`, `geom_kodom`) for full ggplot2 composability.
-- Fan layout (partial circle, e.g. 270°) to preserve ordering without wrap.
+- Fan layout (partial circle, e.g. 270°) to preserve ordering without wrap. *(arc_degrees already supported in kodom_swimlane)*
 - Built-in example dataset.
 - Vignette with clinical examples.
+
+### Done (moved from roadmap)
+- ~~Custom geoms (`geom_swimlane`, `geom_kodom`) for full ggplot2 composability.~~ → `geom_kodom()`, `stat_kodom()`, `scale_color_kodom()` (2026-05-22).
