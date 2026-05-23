@@ -14,6 +14,8 @@ A ggplot2-based toolkit for visualizing individual-level longitudinal trajectori
 Authors:
 \itemize{
   \item Ayoushman Bhattacharya
+  \item Subhrajyoty Roy
+  \item Sayan Das
 }
 
 }

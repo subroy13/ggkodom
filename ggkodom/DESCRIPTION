@@ -27,4 +27,8 @@ Suggests:
     mgcv,
     refund,
     fdapace,
-    patchwork
+    patchwork,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+Config/testthat/edition: 3

@@ -8,6 +8,13 @@
 #' \code{value} at user-specified thresholds.
 #'
 #' @inheritParams kodom_swimlane
+#' @param n_sample Max number of subjects to display.  \code{NULL} = all.
+#'   Default 50.
+#' @param sort_by Order subjects by their \code{"first"}, \code{"last"},
+#'   \code{"mean"}, or \code{"median"} value, OR a named numeric vector
+#'   (e.g.\ from \code{\link{kodom_sort_scores}}).  Default \code{"first"}.
+#' @param point_size Point size (default 3).
+#' @param alpha Segment transparency (default 0.8).
 #' @param thresholds Numeric vector of cut points.
 #'   E.g.\ \code{c(7, 8)} yields three states: \code{< 7},
 #'   \code{7 - 8}, \code{> 8}.  Ignored when \code{state} is given.

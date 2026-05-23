@@ -25,7 +25,7 @@
 #' @param colors Length-3 color vector for
 #'   (\eqn{\mu - c\sqrt{\lambda}\phi}, \eqn{\mu}, \eqn{\mu + c\sqrt{\lambda}\phi}).
 #'   Default = teal / grey / red, consistent with \code{kodom_colors()}.
-#' @param ... Currently unused.
+#' @param ... Passed to method.
 #' @return A \code{ggplot} object.
 #' @export
 #' @examples

@@ -1,0 +1,342 @@
+---
+title: "Visualizing Longitudinal Trajectories with ggkodom"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Visualizing Longitudinal Trajectories with ggkodom}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4,
+  out.width = "100%"
+)
+has_lme4 <- requireNamespace("lme4", quietly = TRUE)
+has_fdapace <- requireNamespace("fdapace", quietly = TRUE)
+has_mgcv <- requireNamespace("mgcv", quietly = TRUE)
+```
+
+**ggkodom** is a ggplot2 toolkit for visualizing individual longitudinal
+trajectories. Each subject gets its own visual lane — colored by
+measurement value — so you can see patterns across subjects and time
+at a glance. The package provides four display modes (swimlane, state-ribbon,
+heatmap, circular), a one-call smoother, and FPCA-based decomposition tools.
+
+## The data format
+
+Every function in **ggkodom** expects a **long-format** data frame with at
+least three columns: one for the subject identifier, one for time, and one for
+the measurement value.
+
+We will use a synthetic dataset that mimics repeated HbA1c measurements in a
+diabetes monitoring study: 60 subjects, 4–8 irregularly-spaced visits,
+sparse observations typical of electronic health records.
+
+```{r generate-data}
+library(ggkodom)
+
+set.seed(1234)
+n_subj <- 60
+ids <- seq_len(n_subj)
+
+make_subject <- function(i) {
+  n_obs <- sample(4:8, 1)
+  baseline <- rnorm(1, mean = 7.2, sd = 1.2)
+  slope <- rnorm(1, mean = -0.05, sd = 0.15)
+  times <- sort(sample(0:24, n_obs, replace = FALSE)) # months 0–24, no ties
+  values <- baseline + slope * times + rnorm(n_obs, 0, 0.5)
+  data.frame(id = paste0("S", i), time = times, hba1c = pmax(4, pmin(12, values)),
+             stringsAsFactors = FALSE)
+}
+
+df <- do.call(rbind, lapply(ids, make_subject))
+head(df, 8)
+```
+
+## 1. The classic swimlane
+
+`kodom_swimlane()` produces one horizontal lane per subject. Segments are
+colored by the measurement value using the Kadam-flower palette
+(teal → gold → red). Subjects are sorted by their first observed value by
+default, so the plot shows a natural gradient from healthiest (bottom) to
+least controlled (top).
+
+```{r swimlane-basic, fig.height = 5}
+kodom_swimlane(df,
+  id = "id",
+  time = "time",
+  value = "hba1c",
+  color_breaks = c(5.7, 6.5, 8),
+  n_sample = 40
+)
+```
+
+The `color_breaks` argument anchors the three palette colors to clinically
+meaningful cut-points (normal / prediabetes / diabetes / poor control).
+
+### Tile (heatmap) layout
+
+For datasets with many subjects or densely sampled time, the tile variant
+bins time and fills each cell with an aggregate:
+
+```{r swimlane-tile, fig.height = 5}
+kodom_swimlane(df,
+  id = "id",
+  time = "time",
+  value = "hba1c",
+  geom = "tile",
+  time_bins = 8,
+  agg_fun = "mean",
+  color_breaks = c(5.7, 6.5, 8),
+  n_sample = 40
+)
+```
+
+### Circular (Kodom) layout
+
+The eponymous circular variant arranges subjects as radial spokes, time
+increasing outward. The pattern resembles the Kadam flower
+(*Neolamarckia cadamba*):
+
+```{r swimlane-polar, fig.height = 5, fig.width = 5}
+kodom_swimlane(df,
+  id = "id",
+  time = "time",
+  value = "hba1c",
+  coord = "polar",
+  color_breaks = c(5.7, 6.5, 8),
+  n_sample = 30
+)
+```
+
+## 2. State-ribbon chart
+
+When clinical thresholds matter more than exact values, `kodom_state()`
+replaces the continuous gradient with discrete color bands:
+
+```{r state-ribbon, fig.height = 5}
+kodom_state(df,
+  id = "id",
+  time = "time",
+  value = "hba1c",
+  thresholds = c(5.7, 6.5, 8),
+  state_labels = c("Normal", "Pre-DM", "DM", "Poor control"),
+  n_sample = 40
+)
+```
+
+The eye now catches **state transitions** — a subject whose lane shifts
+from red to teal is improving — without being distracted by exact values.
+
+## 3. Sorting lanes by an external key
+
+Any of the built-in string options (`"first"`, `"last"`, `"mean"`,
+`"median"`) can be passed to `sort_by`. You can also pass a named numeric
+vector to impose an arbitrary order:
+
+```{r sort-custom}
+# Order by mean HbA1c, descending
+mean_hba1c <- tapply(df$hba1c, df$id, mean)
+# setNames creates the named vector kodom_swimlane expects
+key <- sort(mean_hba1c, decreasing = TRUE)
+
+kodom_swimlane(df,
+  id = "id",
+  time = "time",
+  value = "hba1c",
+  sort_by = key,
+  color_breaks = c(5.7, 6.5, 8),
+  n_sample = 40
+)
+```
+
+## 4. Fitting a smoothed model with `kodom_smooth()` + `kodom_fit()`
+
+`kodom_smooth()` wraps three smoothers — mixed models (`lme4`), GAMs
+(`mgcv`), and functional PCA (`fdapace`) — behind a single call. The
+returned list contains the fitted object and a `refit_fn` closure for
+bootstrap refitting.
+
+`kodom_fit()` then visualizes the **fitted curves** (not raw points) as a
+swimlane — useful for comparing individual trajectories after accounting for
+measurement noise.
+
+```{r smooth-lmer, eval = has_lme4}
+sm_lmer <- suppressMessages(
+  kodom_smooth(df,
+    method = "lmer",
+    id = "id", time = "time", value = "hba1c"
+  )
+)
+
+kodom_fit(sm_lmer$fit,
+  id = "id",
+  time = "time",
+  color_breaks = c(5.7, 6.5, 8),
+  n_sample = 40
+)
+```
+
+```{r smooth-lmer-note, eval = !has_lme4, echo = FALSE}
+message("Install 'lme4' to run this section.")
+```
+
+The fitted lines are smoother than the raw observations and reveal the
+underlying trend for each subject.
+
+## 5. FPCA decomposition
+
+Functional PCA decomposes trajectories into a mean function and a small
+number of orthogonal modes of variation (eigenfunctions). This is
+especially useful when measurements are sparse and irregularly timed.
+
+### Fitting FPCA
+
+```{r fpca-fit, eval = has_fdapace}
+sm_fp <- kodom_smooth(df,
+  method = "fpca",
+  id = "id", time = "time", value = "hba1c"
+)
+fp <- sm_fp$fit
+```
+
+```{r fpca-note, eval = !has_fdapace, echo = FALSE}
+message("Install 'fdapace' to run the FPCA sections.")
+```
+
+### Eigenfunction plot (`kodom_components`)
+
+`kodom_components()` shows the leading eigenfunctions — the directions in
+function space that account for the most inter-subject variability:
+
+```{r fpca-components, eval = has_fdapace, fig.height = 5}
+kodom_components(fp, show_mean = TRUE)
+```
+
+Each panel is one functional principal component (FPC). A large positive
+score on PC 1 means the subject's trajectory is displaced in the direction
+of that curve relative to the mean.
+
+### Perturbation plot (`kodom_perturbation`)
+
+The Ramsay–Silverman perturbation plot overlays
+$\mu(t) \pm 2\sqrt{\lambda_k}\,\phi_k(t)$ to show what each PC
+*physically does* to the mean curve:
+
+```{r fpca-perturbation, eval = has_fdapace, fig.height = 5}
+kodom_perturbation(fp, K = 2)
+```
+
+A subject two standard deviations above average on PC 1 would have
+a trajectory close to the upper (red) curve.
+
+### Fitted reconstruction swimlane
+
+`kodom_fit()` also works on FPCA objects:
+
+```{r fpca-fit-plot, eval = has_fdapace, fig.height = 5}
+ids_fp <- names(fp$inputData$Ly)[seq_len(nrow(fp$xiEst))]
+
+kodom_fit(fp,
+  ids = ids_fp,
+  data = df,
+  id = "id",
+  time = "time",
+  value = "hba1c",
+  color_breaks = c(5.7, 6.5, 8),
+  n_sample = 40
+)
+```
+
+## 6. Score scatter and clustering
+
+### Score scatter plot (`kodom_scores`)
+
+`kodom_scores()` plots subjects in the two-dimensional FPC score space.
+Each point is a subject; its position summarizes the shape of their
+trajectory:
+
+```{r fpca-scores, eval = has_fdapace}
+kodom_scores(fp)
+```
+
+Color subjects by a continuous outcome (e.g., their mean HbA1c):
+
+```{r fpca-scores-colored, eval = has_fdapace}
+mean_val <- tapply(df$hba1c, df$id, mean)
+# align to the IDs in the fit
+ids_fp <- names(fp$inputData$Ly)[seq_len(nrow(fp$xiEst))]
+groups <- as.numeric(mean_val[ids_fp])
+
+kodom_scores(fp, groups = groups)
+```
+
+### Clustering in score space (`cluster_scores`)
+
+`cluster_scores()` runs k-means (or Ward hierarchical) clustering on the
+FPC scores and returns a named factor you can pipe directly into other
+ggkodom functions:
+
+```{r cluster, eval = has_fdapace}
+cl <- cluster_scores(fp, k = 3, seed = 7)
+table(cl)
+```
+
+Overlay the clusters onto the score scatter:
+
+```{r cluster-scores, eval = has_fdapace}
+kodom_scores(fp, groups = cl[ids_fp])
+```
+
+### Re-sort the swimlane by PC1 score
+
+`kodom_sort_scores()` builds a named sort key from a chosen FPC:
+
+```{r cluster-swimlane, eval = has_fdapace, fig.height = 5}
+sort_key <- kodom_sort_scores(fp, pc = 1, ids = ids_fp)
+
+df_cl <- df
+df_cl$cluster <- cl[as.character(df_cl$id)]
+
+kodom_swimlane(df_cl,
+  id           = "id",
+  time         = "time",
+  value        = "hba1c",
+  sort_by      = sort_key,
+  facet_rows   = "cluster",
+  color_breaks = c(5.7, 6.5, 8),
+  n_sample     = 60
+)
+```
+
+Faceting by cluster and ordering lanes by PC1 score reveals whether the
+functional clusters correspond to distinct trajectory shapes — a quick
+sanity-check before reporting phenotypes.
+
+## Further customization
+
+All ggkodom plots return a standard `ggplot` object and can be further
+modified with any ggplot2 layer:
+
+```{r customize}
+library(ggplot2)
+
+kodom_swimlane(df,
+  id = "id",
+  time = "time",
+  value = "hba1c",
+  color_breaks = c(5.7, 6.5, 8),
+  n_sample = 40
+) +
+  labs(
+    title = "HbA1c trajectories (n = 40)",
+    subtitle = "Sorted by first observed value",
+    x = "Months from enrolment",
+    color = "HbA1c (%)"
+  ) +
+  theme(plot.title = element_text(face = "bold"))
+```

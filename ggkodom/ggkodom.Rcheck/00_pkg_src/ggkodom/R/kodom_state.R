@@ -8,6 +8,13 @@
 #' \code{value} at user-specified thresholds.
 #'
 #' @inheritParams kodom_swimlane
+#' @param n_sample Max number of subjects to display.  \code{NULL} = all.
+#'   Default 50.
+#' @param sort_by Order subjects by their \code{"first"}, \code{"last"},
+#'   \code{"mean"}, or \code{"median"} value, OR a named numeric vector
+#'   (e.g.\ from \code{\link{kodom_sort_scores}}).  Default \code{"first"}.
+#' @param point_size Point size (default 3).
+#' @param alpha Segment transparency (default 0.8).
 #' @param thresholds Numeric vector of cut points.
 #'   E.g.\ \code{c(7, 8)} yields three states: \code{< 7},
 #'   \code{7 - 8}, \code{> 8}.  Ignored when \code{state} is given.
@@ -17,16 +24,16 @@
 #'   Auto-generated from \code{thresholds} when \code{NULL}.
 #' @param state_colors Character vector of colors per state.
 #'   Auto-generated when \code{NULL}.
-#' @param line_width Segment width (default 2 — thicker than swimlane
-#'   to emphasize discrete bands).
+#' @param line_width Segment width (default 0.7).
 #' @return A \code{ggplot} object.
 #' @export
 #' @examples
 #' set.seed(42)
+#' n_subj <- 20; n_obs <- 5
 #' df <- data.frame(
-#'   id    = rep(1:20, each = 5),
-#'   time  = rep(seq(0, 120, 30), 20),
-#'   value = rnorm(100, 7, 1.5)
+#'   id    = rep(seq_len(n_subj), each = n_obs),
+#'   time  = as.vector(replicate(n_subj, sort(round(runif(n_obs, 0, 120))))),
+#'   value = rnorm(n_subj * n_obs, 7, 1.5)
 #' )
 #' kodom_state(df, thresholds = c(6.5, 8))
 kodom_state <- function(data, id = "id", time = "time", value = "value",
@@ -34,7 +41,7 @@ kodom_state <- function(data, id = "id", time = "time", value = "value",
                         state_labels = NULL, state_colors = NULL,
                         n_sample = 50, sort_by = "first",
                         outcome = NULL, outcome_label = "*",
-                        point_size = 3, line_width = 2, alpha = 0.8,
+                        point_size = 3, line_width = 0.7, alpha = 0.8,
                         facet_rows = NULL, facet_cols = NULL,
                         seed = 123) {
 
@@ -122,7 +129,7 @@ kodom_state <- function(data, id = "id", time = "time", value = "value",
         y = .data$.id,         yend = .data$.id,
         color = .data$.state
       ),
-      linewidth = line_width, alpha = alpha
+      linewidth = line_width, alpha = alpha, lineend = "round"
     ) +
     ggplot2::geom_point(
       data = df,

@@ -18,8 +18,9 @@
 #' (\code{glyph_size} per side), so the visual scale is automatic and
 #' independent of FPC magnitudes.
 #'
-#' @param fit An FPCA fit (\code{refund::fpca.sc} \code{fpca}/\code{fpca.sc}
-#'   class, or \code{fdapace::FPCA} \code{FPCA} class).
+#' @param fit An FPCA fit: \code{refund::fpca.sc} (class
+#'   \code{"fpca"}/\code{"fpca.sc"}) or \code{fdapace::FPCA} (class
+#'   \code{"FPCA"}).
 #' @param data Long-format data frame with subject id, time, value,
 #'   and an optional variable column.
 #' @param id,time,value Column names (strings).  Defaults

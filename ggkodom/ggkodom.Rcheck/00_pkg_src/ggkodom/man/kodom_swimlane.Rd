@@ -9,17 +9,27 @@ kodom_swimlane(
   id = "id",
   time = "time",
   value = "value",
+  geom = c("path", "tile"),
+  coord = c("linear", "polar"),
   n_sample = 50,
-  sort_by = "first",
+  sort_by = NULL,
   colors = kodom_colors(),
   color_breaks = NULL,
+  discretize = FALSE,
   outcome = NULL,
   outcome_label = "*",
-  point_size = 3,
+  point_size = NULL,
   line_width = 0.8,
   alpha = 0.7,
   facet_rows = NULL,
   facet_cols = NULL,
+  time_bins = 10,
+  time_breaks = NULL,
+  agg_fun = c("mean", "median", "first", "last", "min", "max"),
+  gap_fraction = 0.15,
+  inner_fraction = 0.3,
+  direction = 1,
+  show_rings = FALSE,
   seed = 123
 )
 }
@@ -32,31 +42,69 @@ kodom_swimlane(
 
 \item{value}{Column name (string) for measurement value (numeric).}
 
-\item{n_sample}{Max number of subjects to display. \code{NULL} = all.}
+\item{geom}{\code{"path"} (default) or \code{"tile"}.}
 
-\item{sort_by}{Order subjects by their \code{"first"} (default),
-\code{"last"}, \code{"mean"}, or \code{"median"} value.}
+\item{coord}{\code{"linear"} (default) or \code{"polar"} — only valid
+with \code{geom = "path"}.}
+
+\item{n_sample}{Max number of subjects to display.  \code{NULL} = all.
+Default 50; consider raising for \code{geom = "tile"}.}
+
+\item{sort_by}{Order subjects by their \code{"first"}, \code{"last"},
+\code{"mean"}, or \code{"median"} value, OR a named numeric vector
+(e.g. from \code{\link{kodom_sort_scores}}).  \code{NULL} (default)
+picks \code{"first"} for path and \code{"mean"} for tile.}
 
 \item{colors}{Gradient colors; default \code{\link{kodom_colors}()}.}
 
 \item{color_breaks}{Numeric breakpoints anchoring the gradient.
-E.g.\ \code{c(5.7, 7, 10)} places the three default colors at
-those values.  \code{NULL} spaces them evenly.}
+E.g.\ \code{c(5.7, 7, 10)} places the three default colors at those
+values.  \code{NULL} spaces them evenly.}
+
+\item{discretize}{\code{FALSE} (default) = smooth gradient;
+\code{TRUE} = solid step bands separated at \code{color_breaks}
+(see \code{\link{kodom_step_scale}}).  Useful when fitted/smoothed
+values wash out into a single hue.}
 
 \item{outcome}{Column name (string) for binary outcome.
-Positive subjects get \code{outcome_label} on the y-axis.}
+Positive subjects get \code{outcome_label} on the y-axis.  Ignored
+when \code{coord = "polar"} (no y-axis text).}
 
 \item{outcome_label}{Marker for positive outcomes (default \code{"*"}).}
 
-\item{point_size}{Point size (default 3).}
+\item{point_size}{Point size.  \code{NULL} (default) picks 3 for
+linear paths, 2 for polar paths, and 0 (no points) for tiles.}
 
-\item{line_width}{Line width (default 0.8).}
+\item{line_width}{Line width (default 0.8).  Ignored for tiles.}
 
-\item{alpha}{Line transparency (default 0.7).}
+\item{alpha}{Line transparency (default 0.7).  Ignored for tiles.}
 
-\item{facet_rows}{Column name for row faceting (\code{NULL} = none).}
+\item{facet_rows, facet_cols}{Column names for row/column faceting
+(\code{NULL} = none).}
 
-\item{facet_cols}{Column name for column faceting (\code{NULL} = none).}
+\item{time_bins}{Number of equal-width time bins (default 10).  Used
+only when \code{geom = "tile"}.  Ignored if \code{time_breaks} is
+supplied.}
+
+\item{time_breaks}{Numeric vector of custom bin boundaries.  Used only
+when \code{geom = "tile"}.  Overrides \code{time_bins}.}
+
+\item{agg_fun}{Aggregation within tile bins: \code{"mean"} (default),
+\code{"median"}, \code{"first"}, \code{"last"}, \code{"min"}, or
+\code{"max"}.  Used only when \code{geom = "tile"}.}
+
+\item{gap_fraction}{Fraction of the circle left empty as a visual gap
+at the ordering seam (default 0.15).  Polar only.}
+
+\item{inner_fraction}{Fraction of the time range used as a hollow
+inner buffer so short-follow-up subjects remain visible (default 0.3).
+Polar only.}
+
+\item{direction}{\code{1} = clockwise (default), \code{-1} = counter-
+clockwise.  Polar only.}
+
+\item{show_rings}{Draw concentric reference circles for time?
+(default \code{FALSE}).  Polar only.}
 
 \item{seed}{Random seed for subject sampling.}
 }
@@ -64,9 +112,24 @@ Positive subjects get \code{outcome_label} on the y-axis.}
 A \code{ggplot} object that can be further customized with \code{+}.
 }
 \description{
-Each subject occupies a horizontal lane.
-Segments and points between consecutive measurements are colored by
-the measurement value, revealing individual trajectories across time.
+One row per subject; segments and points colored by measurement value.
+This single function covers three layouts via the \code{geom} and
+\code{coord} arguments:
+\describe{
+\item{\code{geom = "path"}, \code{coord = "linear"}}{(default) — the
+classic swimlane: lines + points along time.}
+\item{\code{geom = "tile"}, \code{coord = "linear"}}{rectangular
+heatmap: time is binned and each subject-bin cell is filled by an
+aggregate.  Useful for large \eqn{N}.}
+\item{\code{geom = "path"}, \code{coord = "polar"}}{the circular
+("Kodom") variant: each subject is a radial spoke from the center,
+time increases outward.  Resembles a Kadam flower
+(\emph{Neolamarckia cadamba}).}
+}
+}
+\details{
+\code{geom = "tile"} with \code{coord = "polar"} (a sunburst) is not
+supported.
 }
 \examples{
 set.seed(42)
@@ -75,8 +138,13 @@ df <- data.frame(
   time  = rep(seq(0, 120, 30), 20),
   value = rnorm(100, 7, 1.5)
 )
-kodom_swimlane(df)
 
-# With color anchored at clinical thresholds
+## classic swimlane
 kodom_swimlane(df, color_breaks = c(5, 7, 10))
+
+## heatmap variant
+kodom_swimlane(df, geom = "tile", time_bins = 7)
+
+## circular variant
+kodom_swimlane(df, coord = "polar")
 }

@@ -3,3 +3,8 @@
 ^LICENSE\.md$
 ^info\.md$
 ^README\.Rmd$
+^tests/smoke_check\.R$
+^tests/visual_check\.R$
+^tests/visual_check\.pdf$
+^doc$
+^Meta$

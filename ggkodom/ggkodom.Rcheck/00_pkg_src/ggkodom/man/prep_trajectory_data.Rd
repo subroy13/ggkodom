@@ -27,8 +27,11 @@ prep_trajectory_data(
 
 \item{n_sample}{Max subjects to keep. \code{NULL} = all.}
 
-\item{sort_by}{How to order subjects: \code{"first"}, \code{"last"},
-\code{"mean"}, or \code{"median"} value.}
+\item{sort_by}{Either (a) one of \code{"first"}, \code{"last"},
+\code{"mean"}, \code{"median"} — a summary of the value column;
+or (b) a named numeric vector whose names match subject ids,
+used directly as the sort key (e.g.\ FPC scores from
+\code{\link{kodom_sort_scores}}, BLUPs, cluster scores, ...).}
 
 \item{outcome}{Optional column name (string) for binary outcome.}
 

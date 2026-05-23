@@ -2,7 +2,7 @@
 % Please edit documentation in R/colors.R
 \name{kodom_gradient_scale}
 \alias{kodom_gradient_scale}
-\title{Build a continuous gradient color/fill scale with kodom defaults}
+\title{Continuous gradient color/fill scale with kodom defaults}
 \usage{
 kodom_gradient_scale(
   aesthetic = c("color", "fill"),
@@ -16,7 +16,7 @@ kodom_gradient_scale(
 
 \item{colors}{Gradient color vector.}
 
-\item{color_breaks}{Numeric breakpoints to anchor the gradient via
+\item{color_breaks}{Numeric breakpoints anchoring the gradient via
 \code{\link[scales]{rescale}}.  \code{NULL} = evenly spaced.}
 
 \item{name}{Legend title.}
@@ -25,6 +25,7 @@ kodom_gradient_scale(
 A ggplot2 scale object.
 }
 \description{
-Build a continuous gradient color/fill scale with kodom defaults
+Smooth gradient — color changes continuously between
+\code{color_breaks}.  See \code{\link{kodom_step_scale}} for the
+discrete-band variant.
 }
-\keyword{internal}

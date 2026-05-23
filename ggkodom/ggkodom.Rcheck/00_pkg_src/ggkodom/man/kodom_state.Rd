@@ -18,7 +18,7 @@ kodom_state(
   outcome = NULL,
   outcome_label = "*",
   point_size = 3,
-  line_width = 2,
+  line_width = 1.2,
   alpha = 0.8,
   facet_rows = NULL,
   facet_cols = NULL,
@@ -47,26 +47,30 @@ Auto-generated from \code{thresholds} when \code{NULL}.}
 \item{state_colors}{Character vector of colors per state.
 Auto-generated when \code{NULL}.}
 
-\item{n_sample}{Max number of subjects to display. \code{NULL} = all.}
+\item{n_sample}{Max number of subjects to display.  \code{NULL} = all.
+Default 50; consider raising for \code{geom = "tile"}.}
 
-\item{sort_by}{Order subjects by their \code{"first"} (default),
-\code{"last"}, \code{"mean"}, or \code{"median"} value.}
+\item{sort_by}{Order subjects by their \code{"first"}, \code{"last"},
+\code{"mean"}, or \code{"median"} value, OR a named numeric vector
+(e.g. from \code{\link{kodom_sort_scores}}).  \code{NULL} (default)
+picks \code{"first"} for path and \code{"mean"} for tile.}
 
 \item{outcome}{Column name (string) for binary outcome.
-Positive subjects get \code{outcome_label} on the y-axis.}
+Positive subjects get \code{outcome_label} on the y-axis.  Ignored
+when \code{coord = "polar"} (no y-axis text).}
 
 \item{outcome_label}{Marker for positive outcomes (default \code{"*"}).}
 
-\item{point_size}{Point size (default 3).}
+\item{point_size}{Point size.  \code{NULL} (default) picks 3 for
+linear paths, 2 for polar paths, and 0 (no points) for tiles.}
 
-\item{line_width}{Segment width (default 2 — thicker than swimlane
-to emphasize discrete bands).}
+\item{line_width}{Segment width (default 1.2 — slightly thicker than
+swimlane to emphasize discrete bands).}
 
-\item{alpha}{Line transparency (default 0.7).}
+\item{alpha}{Line transparency (default 0.7).  Ignored for tiles.}
 
-\item{facet_rows}{Column name for row faceting (\code{NULL} = none).}
-
-\item{facet_cols}{Column name for column faceting (\code{NULL} = none).}
+\item{facet_rows, facet_cols}{Column names for row/column faceting
+(\code{NULL} = none).}
 
 \item{seed}{Random seed for subject sampling.}
 }
@@ -81,10 +85,11 @@ States are either provided directly or derived by cutting
 }
 \examples{
 set.seed(42)
+n_subj <- 20; n_obs <- 5
 df <- data.frame(
-  id    = rep(1:20, each = 5),
-  time  = rep(seq(0, 120, 30), 20),
-  value = rnorm(100, 7, 1.5)
+  id    = rep(seq_len(n_subj), each = n_obs),
+  time  = as.vector(replicate(n_subj, sort(round(runif(n_obs, 0, 120))))),
+  value = rnorm(n_subj * n_obs, 7, 1.5)
 )
 kodom_state(df, thresholds = c(6.5, 8))
 }

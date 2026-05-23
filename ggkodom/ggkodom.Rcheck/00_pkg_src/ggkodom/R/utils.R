@@ -26,8 +26,11 @@ check_columns <- function(data, cols) {
 #' @param time Column name (string) for time variable (coerced to numeric).
 #' @param value Column name (string) for measurement value (coerced to numeric).
 #' @param n_sample Max subjects to keep. \code{NULL} = all.
-#' @param sort_by How to order subjects: \code{"first"}, \code{"last"},
-#'   \code{"mean"}, or \code{"median"} value.
+#' @param sort_by Either (a) one of \code{"first"}, \code{"last"},
+#'   \code{"mean"}, \code{"median"} — a summary of the value column;
+#'   or (b) a named numeric vector whose names match subject ids,
+#'   used directly as the sort key (e.g.\ FPC scores from
+#'   \code{\link{kodom_sort_scores}}, BLUPs, cluster scores, ...).
 #' @param outcome Optional column name (string) for binary outcome.
 #' @param outcome_label Character to mark positive-outcome subjects.
 #' @param seed Random seed for sampling.
@@ -45,7 +48,9 @@ prep_trajectory_data <- function(data, id, time, value,
                                  outcome = NULL,
                                  outcome_label = "*",
                                  seed = 123) {
-  sort_by <- match.arg(sort_by)
+  ## sort_by may be either a method string or a named numeric vector
+  use_named_sort <- is.numeric(sort_by) && !is.null(names(sort_by))
+  if (!use_named_sort) sort_by <- match.arg(sort_by)
 
   ## validate
 
@@ -78,13 +83,25 @@ prep_trajectory_data <- function(data, id, time, value,
   df <- df[order(df[[id]], df[[time]]), , drop = FALSE]
 
   ## compute sort key for y-axis ordering
-  sort_fn <- switch(sort_by,
-    first  = function(x) x[1L],
-    last   = function(x) x[length(x)],
-    mean   = mean,
-    median = stats::median
-  )
-  sort_key <- tapply(df[[value]], df[[id]], sort_fn)
+  if (use_named_sort) {
+    ids_now <- as.character(unique(df[[id]]))
+    miss <- setdiff(ids_now, names(sort_by))
+    if (length(miss) > 0L) {
+      stop("sort_by has no value for ", length(miss), " subject id(s): ",
+           paste(utils::head(miss, 5L), collapse = ", "),
+           if (length(miss) > 5L) ", ..." else "", call. = FALSE)
+    }
+    sort_key <- sort_by[ids_now]
+    names(sort_key) <- ids_now
+  } else {
+    sort_fn <- switch(sort_by,
+      first  = function(x) x[1L],
+      last   = function(x) x[length(x)],
+      mean   = mean,
+      median = stats::median
+    )
+    sort_key <- tapply(df[[value]], df[[id]], sort_fn)
+  }
   id_order <- names(sort(sort_key))
   df[[id]] <- factor(df[[id]], levels = id_order)
 

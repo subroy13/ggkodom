@@ -2,8 +2,10 @@ Package: ggkodom
 Title: Visualize Individual Longitudinal Trajectories
 Version: 0.1.0
 Authors@R: c(
-    person("Subrata", "Pal", , "subrata@iastate.edu", role = c("aut", "cre")),
-    person("Ayoushman", "Bhattacharya", role = "aut")
+    person("Ayoushman", "Bhattacharya", role = "aut"),
+    person("Subhrajyoty", "Roy", role = "aut"),
+    person("Sayan", "Das", role = "aut"),
+    person("Subrata", "Pal", , "subrata@iastate.edu", role = c("aut", "cre"))
   )
 Description: A ggplot2-based toolkit for visualizing individual-level
     longitudinal trajectories. Creates swimlane plots, circular 'kodom'
@@ -16,9 +18,14 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Imports: ggplot2 (>= 3.4.0), rlang, scales
-Suggests: testthat (>= 3.0.0)
+Suggests: testthat (>= 3.0.0), lme4, mgcv, refund, fdapace, patchwork,
+        knitr, rmarkdown
+VignetteBuilder: knitr
+Config/testthat/edition: 3
 NeedsCompilation: no
-Packaged: 2026-04-16 02:26:48 UTC; subrata
-Author: Subrata Pal [aut, cre],
-  Ayoushman Bhattacharya [aut]
+Packaged: 2026-05-23 01:40:50 UTC; subroy13
+Author: Ayoushman Bhattacharya [aut],
+  Subhrajyoty Roy [aut],
+  Sayan Das [aut],
+  Subrata Pal [aut, cre]
 Maintainer: Subrata Pal <subrata@iastate.edu>

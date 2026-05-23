@@ -20,7 +20,7 @@
 #' @param data Long-format data with one row per observation.
 #' @param id,time,value Column names (strings).
 #' @param B Number of bootstrap replicates (default 50).
-#' @param refit_fn A function \code{function(data) -> FPCA fit object}.
+#' @param refit_fn A \code{function(data)} that returns an FPCA fit object.
 #'   Required.
 #' @param seed Random seed.
 #' @return A list of length \code{B} of FPCA fits.

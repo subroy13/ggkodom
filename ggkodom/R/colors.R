@@ -12,8 +12,10 @@
 #' kodom_colors()
 #' kodom_colors(7)
 kodom_colors <- function(n = 3L) {
-  anchors <- c("#008d98", "#ffcc3d", "#d7433b")
-  if (n <= 3L) return(anchors[seq_len(min(n, 3L))])
+  anchors <- c("#008D98", "#FFCC3D", "#D7433B")
+  if (n <= 3L) {
+    return(anchors[seq_len(min(n, 3L))])
+  }
   grDevices::colorRampPalette(anchors)(n)
 }
 
@@ -61,8 +63,9 @@ kodom_gradient_scale <- function(aesthetic = c("color", "fill"),
 #' @export
 #' @examples
 #' \dontrun{
-#'   kodom_swimlane(df) + kodom_step_scale("color",
-#'                                         color_breaks = c(5.5, 7, 8, 10))
+#' kodom_swimlane(df) + kodom_step_scale("color",
+#'   color_breaks = c(5.5, 7, 8, 10)
+#' )
 #' }
 kodom_step_scale <- function(aesthetic = c("color", "fill"),
                              colors = kodom_colors(),

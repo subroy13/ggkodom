@@ -29,7 +29,7 @@
 #'   sign-aligned to the main fit and drawn as light traces behind the
 #'   main curve, giving a visual variability envelope.
 #' @param boot_alpha Transparency for bootstrap traces (default 0.15).
-#' @param ... Currently unused.
+#' @param ... Passed to method.
 #' @return A \code{ggplot} object.
 #' @export
 #' @examples
