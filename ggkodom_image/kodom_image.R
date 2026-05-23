@@ -49,20 +49,37 @@ leaf_angle <- function(x0, y0,
     lwd = 2
   )
 }
+hexagon <- function(cx = 0, cy = -0.25, r = 1.75,
+                    fill = "#06130A",
+                    border = "goldenrod",
+                    lwd = 4) {
+  ang <- seq(pi/6, 2*pi + pi/6, length.out = 7)
+  x <- cx + r*cos(ang)
+  y <- cy + r*sin(ang)
+  polygon(
+    x, y,
+    col = fill,
+    border = border,
+    lwd = lwd
+  )
+}
 
 # canvas ====================
-par(bg = "#06130A")
+# par(bg = "#06130A")
+par(bg = "white")
 plot(
   0, 0,
   type = "n",
   xlim = c(-1.5, 1.5),
   ylim = c(-2.0, 1.5),
   asp  = 1,
-  axes = FALSE,
+  axes = F,
   xlab = "",
   ylab = "",
   main = ""
 )
+
+hexagon()
 
 # right leaf
 leaf_angle(
@@ -157,5 +174,7 @@ for(i in 1:n_petals) {
   )
 }
 
-par(bg = "white")
+# points(x = 1, y = 0.7, col = "red", pch = 19)
+
+# par(bg = "white")
 rm(list = ls())
