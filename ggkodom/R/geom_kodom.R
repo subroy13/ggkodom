@@ -428,3 +428,149 @@ geom_kodom_tile <- function(mapping = NULL, data = NULL,
   )
   list(layer_obj, ggplot2::scale_y_discrete())
 }
+
+
+#### StatKodomPolar ####
+
+#' @rdname geom_kodom_polar
+#' @format NULL
+#' @usage NULL
+#' @export
+StatKodomPolar <- ggplot2::ggproto("StatKodomPolar", StatKodom,
+
+  extra_params = c("na.rm", "n_sample", "sort_by", "seed",
+                   "gap_fraction", "inner_fraction", "arc_degrees"),
+
+  setup_data = function(data, params) {
+    data <- StatKodom$setup_data(data, params)
+    if (nrow(data) == 0L) return(data)
+
+    n_ids <- nlevels(data$y)
+    gap_fraction <- if (is.null(params$gap_fraction)) 0.15 else params$gap_fraction
+    arc_degrees  <- if (is.null(params$arc_degrees)) 360 else params$arc_degrees
+    if (arc_degrees < 360) gap_fraction <- (360 - arc_degrees) / 360
+    gap_n   <- max(1L, ceiling(n_ids * gap_fraction))
+    ang_max <- n_ids + gap_n
+
+    inner_fraction <- if (is.null(params$inner_fraction)) 0.3 else params$inner_fraction
+    time_range   <- range(data$x, na.rm = TRUE)
+    inner_buffer <- diff(time_range) * inner_fraction
+
+    time_vals <- data$x
+    id_int    <- as.integer(data$y)
+    data$x <- id_int
+    data$y <- time_vals + inner_buffer
+
+    nr <- nrow(data)
+    data <- rbind(data, data[c(1L, 1L), , drop = FALSE])
+    data$x[(nr + 1L):(nr + 2L)] <- c(0.5, ang_max + 0.5)
+    data$y[(nr + 1L):(nr + 2L)] <- NA_real_
+    data$group[(nr + 1L):(nr + 2L)] <- -99L
+    if ("colour" %in% names(data)) data$colour[(nr + 1L):(nr + 2L)] <- NA_real_
+    if ("fill" %in% names(data))   data$fill[(nr + 1L):(nr + 2L)]   <- NA_real_
+
+    data
+  }
+)
+
+
+#### geom_kodom_polar() ####
+
+#' Polar (kodom flower) trajectory layer
+#'
+#' A ggplot2 geom that arranges subjects as angular spokes in a polar
+#' layout, with time as the radial axis.  The ggplot2-native equivalent
+#' of \code{\link{kodom_swimlane}(coord = "polar")}.
+#'
+#' Subjects occupy angular positions; time runs outward from the center.
+#' A hollow inner region (\code{inner_fraction}) keeps short follow-up
+#' subjects visible, and \code{gap_fraction} (or \code{arc_degrees})
+#' leaves a visual gap at the ordering seam.
+#'
+#' This function bundles a \code{coord_polar}, scales, and
+#' \code{theme_kodom_circular()} so a basic call works out of the box.
+#' You can override any of them with \code{+} after \code{geom_kodom_polar()}.
+#'
+#' @section Aesthetics:
+#' Same as \code{\link{geom_kodom}}: \code{x} (time), \code{y}
+#' (subject), \code{colour} (value), \code{alpha}, \code{linewidth},
+#' \code{linetype}.
+#'
+#' @inheritParams geom_kodom
+#' @param gap_fraction Fraction of circle left empty at the ordering
+#'   seam (default 0.15).  Overridden when \code{arc_degrees < 360}.
+#' @param inner_fraction Fraction of the time range used as a hollow
+#'   inner buffer (default 0.3).
+#' @param direction \code{1} = clockwise (default), \code{-1} =
+#'   counter-clockwise.
+#' @param arc_degrees Angular extent in degrees (default 360).  Use
+#'   e.g.\ 270 for a fan layout.
+#' @return A list containing a ggplot2 layer, \code{coord_polar},
+#'   position scales, and \code{theme_kodom_circular}.
+#' @export
+#' @examples
+#' library(ggplot2)
+#' set.seed(42)
+#' df <- data.frame(
+#'   id    = rep(1:20, each = 5),
+#'   time  = rep(seq(0, 120, 30), 20),
+#'   value = rnorm(100, 7, 1.5)
+#' )
+#'
+#' ggplot(df, aes(x = time, y = id, colour = value)) +
+#'   geom_kodom_polar()
+#'
+#' ggplot(df, aes(x = time, y = id, colour = value)) +
+#'   geom_kodom_polar(arc_degrees = 270, n_sample = 15) +
+#'   scale_color_kodom(color_breaks = c(5.7, 7, 10))
+geom_kodom_polar <- function(mapping = NULL, data = NULL,
+                             stat = "kodom_polar",
+                             position = "identity",
+                             ...,
+                             n_sample = NULL,
+                             sort_by = "first",
+                             seed = 123,
+                             point_size = 2,
+                             gap_fraction = 0.15,
+                             inner_fraction = 0.3,
+                             direction = 1,
+                             arc_degrees = 360,
+                             arrow = NULL,
+                             lineend = "butt",
+                             linejoin = "round",
+                             linemitre = 10,
+                             na.rm = TRUE,
+                             show.legend = NA,
+                             inherit.aes = TRUE) {
+  layer_obj <- ggplot2::layer(
+    data        = data,
+    mapping     = mapping,
+    stat        = StatKodomPolar,
+    geom        = GeomKodomPath,
+    position    = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params      = rlang::list2(
+      n_sample       = n_sample,
+      sort_by        = sort_by,
+      seed           = seed,
+      point_size     = point_size,
+      gap_fraction   = gap_fraction,
+      inner_fraction = inner_fraction,
+      arc_degrees    = arc_degrees,
+      arrow          = arrow,
+      lineend        = lineend,
+      linejoin       = linejoin,
+      linemitre      = linemitre,
+      na.rm          = na.rm,
+      ...
+    )
+  )
+  list(
+    layer_obj,
+    ggplot2::coord_polar(theta = "x", start = 0, direction = direction),
+    ggplot2::scale_x_continuous(expand = c(0, 0)),
+    ggplot2::scale_y_continuous(limits = c(0, NA)),
+    theme_kodom_circular()
+  )
+}

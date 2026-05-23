@@ -25,6 +25,7 @@ A small ggplot2-based toolkit for individual-level longitudinal data, with optio
 |---|---|
 | `geom_kodom()` | ggplot2 geom: one path per subject, sorted/sampled via `StatKodom`. Returns layer + `scale_y_discrete()`. Compose with `+` like any ggplot2 geom. |
 | `geom_kodom_tile()` | Heatmap variant: tiles binned by `time_bins`/`time_breaks`, aggregated by `agg_fun`. Uses `fill` aesthetic. |
+| `geom_kodom_polar()` | Polar (kodom flower) variant: subjects as angular spokes, time radial. Bundles `coord_polar` + `theme_kodom_circular()`. Params: `gap_fraction`, `inner_fraction`, `arc_degrees`, `direction`. |
 | `stat_kodom()` | Standalone stat for pairing kodom sorting/sampling with any geom (e.g. `geom_path(stat = "kodom")`). |
 | `scale_color_kodom()` / `scale_colour_kodom()` | Continuous color scale wrapping the kodom teal→gold→red palette. `discretize = TRUE` for step bands. |
 | `scale_fill_kodom()` | Same as above, for the fill aesthetic. |
@@ -32,6 +33,7 @@ A small ggplot2-based toolkit for individual-level longitudinal data, with optio
 | `StatKodomTile` | ggproto Stat extending StatKodom — adds time binning (`time_bins`/`time_breaks`) and value aggregation (`agg_fun`). |
 | `GeomKodomPath` | ggproto Geom extending GeomPath — path + optional observation points (`point_size`). |
 | `GeomKodomTile` | ggproto Geom extending GeomRect — tiles with white borders, computes rect boundaries from factor y. |
+| `StatKodomPolar` | ggproto Stat extending StatKodom — swaps x/y (subject→angular, time→radial), adds gap and inner buffer. |
 
 The earlier `kodom_circular()` and `kodom_heatmap()` collapsed into `kodom_swimlane()`.
 
@@ -89,6 +91,10 @@ Concrete next adds (planned, in order):
 1. `kodom_residuals(fit, data)` — raw lane minus fit lane, same color scale.
 2. `kodom_compare(fit, data)` — side-by-side raw + reconstruction, sortable by score.
 3. `kodom_smooth(data, method = c("fpca", "lmer", "gam"))` — one-call smoother that returns a fit AND a default `refit_fn` for `fpca_boot_subjects()`.
+
+Planned (composable API migration):
+4. `geom_kodom_state()` — discrete state segments (from `kodom_state()`).
+5. `stat_kodom_fit()` / `geom_kodom_fit()` — smoothed swimlanes. Design: default LOESS like `stat_smooth`, plus option to pass a pre-fitted model object (lmer/gam/FPCA). Subhrajyoty's design call.
 
 Interested-but-not-yet:
 - Functional boxplot / outlier highlighting on the lane view (Sun & Genton 2011).

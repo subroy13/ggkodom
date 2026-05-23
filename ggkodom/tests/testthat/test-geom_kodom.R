@@ -190,3 +190,48 @@ test_that("tile composability with scale_fill_kodom + theme_kodom", {
     theme_kodom()
   expect_silent(ggplot2::ggplot_build(p))
 })
+
+
+#### TESTS: geom_kodom_polar ####
+
+test_that("geom_kodom_polar() returns list with layer + coord + scales + theme", {
+  out <- geom_kodom_polar()
+  expect_type(out, "list")
+  expect_s3_class(out[[1]], "LayerInstance")
+  expect_s3_class(out[[2]], "CoordPolar")
+})
+
+test_that("geom_kodom_polar() builds without error", {
+  p <- ggplot2::ggplot(test_df, ggplot2::aes(x = time, y = id, colour = value)) +
+    geom_kodom_polar()
+  expect_silent(ggplot2::ggplot_build(p))
+})
+
+test_that("polar n_sample limits subjects", {
+  p <- ggplot2::ggplot(test_df, ggplot2::aes(x = time, y = id, colour = value)) +
+    geom_kodom_polar(n_sample = 5)
+  b <- ggplot2::ggplot_build(p)
+  real_groups <- unique(b$data[[1]]$group)
+  real_groups <- real_groups[real_groups != -99L]
+  expect_equal(length(real_groups), 5L)
+})
+
+test_that("polar arc_degrees = 270 works", {
+  p <- ggplot2::ggplot(test_df, ggplot2::aes(x = time, y = id, colour = value)) +
+    geom_kodom_polar(arc_degrees = 270)
+  expect_silent(ggplot2::ggplot_build(p))
+})
+
+test_that("polar composability with scale_color_kodom", {
+  p <- ggplot2::ggplot(test_df, ggplot2::aes(x = time, y = id, colour = value)) +
+    geom_kodom_polar() +
+    scale_color_kodom(color_breaks = c(5.7, 7, 10))
+  expect_silent(ggplot2::ggplot_build(p))
+})
+
+test_that("polar no colour mapped works", {
+  p <- ggplot2::ggplot(test_df, ggplot2::aes(x = time, y = id)) +
+    geom_kodom_polar()
+  b <- ggplot2::ggplot_build(p)
+  expect_gt(nrow(b$data[[1]]), 0L)
+})
