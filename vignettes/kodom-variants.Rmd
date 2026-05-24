@@ -1,0 +1,460 @@
+---
+title: "Heatmap and Circular Variants: geom_kodom_heatmap and geom_kodom_circular"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Heatmap and Circular Variants: geom_kodom_heatmap and geom_kodom_circular}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  fig.width  = 10,
+  fig.height = 6,
+  dpi = 300,
+  out.width = "100%"
+)
+library(ggkodom)
+library(ggplot2)
+```
+
+This vignette covers `geom_kodom_heatmap()` and `geom_kodom_circular()` — two
+layouts built on the same aesthetic contract as `geom_kodom_line()` (see the
+companion vignette for path-specific features: lane ordering, point shapes,
+independent `size`/`linewidth`, etc.).
+
+The guiding principle: use the **heatmap** when the cohort is large or when
+per-observation timing matters less than overall trend; use the **circular**
+("Kodom") layout when you want all subjects visible simultaneously in a
+compact flower-like display.
+
+## Sample data
+
+Two datasets are used. The **small cohort** (25 patients, irregular visits)
+is identical to the companion vignette and serves the circular examples. The
+**large cohort** (100 patients) demonstrates where the heatmap layout
+outperforms individual paths.
+
+```{r data}
+set.seed(42)
+
+make_cohort <- function(n_subjects, seed = 42) {
+  set.seed(seed)
+  n_obs_per <- sample(6:12, n_subjects, replace = TRUE)
+  do.call(rbind, lapply(seq_len(n_subjects), function(i) {
+    n     <- n_obs_per[i]
+    base  <- rnorm(1, mean = 7.5, sd = 1.2)
+    trend <- rnorm(1, mean = -0.02, sd = 0.01)
+    time  <- sort(runif(n, 0, 24))
+    value <- base + trend * time + rnorm(n, sd = 0.4)
+    data.frame(
+      subject_id  = sprintf("P%03d", i),
+      visit_month = time,
+      hba1c       = pmax(4, value),
+      arm         = ifelse(i <= round(n_subjects / 2), "Treatment", "Control"),
+      stringsAsFactors = FALSE
+    )
+  }))
+}
+
+df_small <- make_cohort(25)
+df_large <- make_cohort(100)
+```
+
+---
+
+# Part I — `geom_kodom_heatmap()`
+
+The heatmap geom bins the time axis into equal-width intervals and fills each
+(subject × bin) cell with an aggregate of the `fill` aesthetic. Because every
+subject occupies exactly one row regardless of visit count, the layout stays
+readable even for large cohorts.
+
+## 1. Basic usage
+
+Map `fill` (not `colour`) to the measurement value. The stat handles
+binning and aggregation automatically; the default is 10 equal-width bins
+averaged by mean.
+
+```{r heatmap-basic}
+ggplot(df_small, aes(x = visit_month, id = subject_id, fill = hba1c)) +
+  geom_kodom_heatmap() +
+  scale_fill_kodom(name = "HbA1c (%)") +
+  labs(x = "Visit (months)", y = "") +
+  theme_kodom()
+```
+
+Each cell is the mean HbA1c for that subject during that time window. White
+borders separate cells (controlled by `colour` and `linewidth` aesthetics on
+the geom, not the scale).
+
+---
+
+## 2. Choosing bin resolution with `bins`
+
+Fewer bins give a broader summary; more bins reveal finer temporal structure.
+Compare 5, 10, and 20 bins on the large cohort:
+
+```{r heatmap-bins5, fig.height = 8}
+ggplot(df_large, aes(x = visit_month, id = subject_id, fill = hba1c)) +
+  geom_kodom_heatmap(bins = 5, sort_by = "mean") +
+  scale_fill_kodom(name = "HbA1c (%)") +
+  labs(x = "Visit (months)", y = "", title = "bins = 5") +
+  theme_kodom() +
+  theme(axis.text.y = element_blank())
+```
+
+```{r heatmap-bins20, fig.height = 8}
+ggplot(df_large, aes(x = visit_month, id = subject_id, fill = hba1c)) +
+  geom_kodom_heatmap(bins = 20, sort_by = "mean") +
+  scale_fill_kodom(name = "HbA1c (%)") +
+  labs(x = "Visit (months)", y = "", title = "bins = 20") +
+  theme_kodom() +
+  theme(axis.text.y = element_blank())
+```
+
+More bins can produce empty cells (grey) when subjects miss a window entirely.
+Fewer bins mask short-term fluctuations but give a cleaner read.
+
+---
+
+## 3. Clinical time windows with `breaks`
+
+Instead of equal-width bins, supply explicit boundaries aligned to study
+milestones. Here we use 0, 6, 12, 18, and 24 months to match typical
+quarterly assessment windows.
+
+```{r heatmap-breaks}
+ggplot(df_small, aes(x = visit_month, id = subject_id, fill = hba1c)) +
+  geom_kodom_heatmap(
+    breaks  = c(0, 6, 12, 18, 24),
+    sort_by = "mean"
+  ) +
+  scale_fill_kodom(name = "HbA1c (%)") +
+  labs(x = "Study quarter (months)", y = "") +
+  theme_kodom()
+```
+
+`breaks` overrides `bins`. Bin midpoints are used as the x-axis position for
+each tile, so `scale_x_continuous()` labels remain meaningful.
+
+---
+
+## 4. Aggregation functions with `fun`
+
+The default `fun = "mean"` smooths over within-window variation. Other options
+surface different clinical signals:
+
+- `"first"` / `"last"` — baseline or endpoint value in each window
+- `"max"` — worst reading per window (useful for hypoglycaemia risk)
+- `"min"` — best reading per window
+
+```{r heatmap-fun-first}
+ggplot(df_small, aes(x = visit_month, id = subject_id, fill = hba1c)) +
+  geom_kodom_heatmap(
+    breaks  = c(0, 6, 12, 18, 24),
+    fun     = "first",
+    sort_by = "mean"
+  ) +
+  scale_fill_kodom(name = "HbA1c (%)") +
+  labs(x = "Study quarter", y = "", title = 'fun = "first" — earliest reading per window') +
+  theme_kodom()
+```
+
+```{r heatmap-fun-max}
+ggplot(df_small, aes(x = visit_month, id = subject_id, fill = hba1c)) +
+  geom_kodom_heatmap(
+    breaks  = c(0, 6, 12, 18, 24),
+    fun     = "max",
+    sort_by = "mean"
+  ) +
+  scale_fill_kodom(name = "HbA1c (%)") +
+  labs(x = "Study quarter", y = "", title = 'fun = "max" — peak reading per window') +
+  theme_kodom()
+```
+
+---
+
+## 5. Large cohorts — where heatmap wins
+
+`geom_kodom_line()` becomes unreadable beyond ~50 subjects; the heatmap
+stays legible at 100 or more. Suppress y-axis text for large cohorts.
+
+```{r heatmap-large, fig.height = 9}
+ggplot(df_large, aes(x = visit_month, id = subject_id, fill = hba1c)) +
+  geom_kodom_heatmap(bins = 12, sort_by = "mean") +
+  scale_fill_kodom(
+    discretize   = TRUE,
+    color_breaks = c(5.7, 6.5, 8),
+    name         = "HbA1c (%)"
+  ) +
+  labs(
+    x     = "Visit (months)",
+    y     = "",
+    title = "100-patient cohort — discrete clinical bands"
+  ) +
+  theme_kodom() +
+  theme(axis.text.y = element_blank())
+```
+
+`discretize = TRUE` with clinical thresholds (normal < 5.7, pre-diabetic
+5.7–6.5, diabetic 6.5–8, poorly controlled > 8) converts the continuous
+gradient into solid color bands. Each row becomes an instant status
+classification.
+
+---
+
+## 6. Faceting by treatment arm
+
+Because `geom_kodom_heatmap()` is a standard ggplot2 layer, `facet_wrap()`
+works without any extra configuration. Lane ordering is computed within each
+facet panel independently.
+
+```{r heatmap-facet, fig.height = 7}
+ggplot(df_large, aes(x = visit_month, id = subject_id, fill = hba1c)) +
+  geom_kodom_heatmap(bins = 8, sort_by = "mean") +
+  scale_fill_kodom(
+    discretize   = TRUE,
+    color_breaks = c(5.7, 6.5, 8),
+    name         = "HbA1c (%)"
+  ) +
+  facet_wrap(~arm, ncol = 1, scales = "free_y") +
+  labs(x = "Visit (months)", y = "", title = "Treatment vs. Control") +
+  theme_kodom() +
+  theme(axis.text.y = element_blank())
+```
+
+`scales = "free_y"` gives each panel its own set of lanes so subjects are
+not shared across facets — each panel shows only the subjects in that arm.
+
+---
+
+## 7. Adjusting tile borders
+
+The `colour` and `linewidth` aesthetics on the tile control cell borders, not
+the fill scale. Pass them as fixed values directly to the geom.
+
+```{r heatmap-borders}
+ggplot(df_small, aes(x = visit_month, id = subject_id, fill = hba1c)) +
+  geom_kodom_heatmap(
+    breaks    = c(0, 6, 12, 18, 24),
+    colour    = "grey60",
+    linewidth = 0.8
+  ) +
+  scale_fill_kodom(name = "HbA1c (%)") +
+  labs(x = "Study quarter", y = "", title = "Visible grey cell borders") +
+  theme_kodom()
+```
+
+Set `colour = NA` or `linewidth = 0` to remove borders entirely for a
+seamless mosaic appearance.
+
+---
+
+# Part II — `geom_kodom_circular()`
+
+The circular geom projects each subject onto a radial spoke, with time
+increasing outward from the centre and value encoded as a colour gradient
+along the spoke. The layout resembles a Kadam flower
+(*Neolamarckia cadamba*), giving the package its name.
+
+Internally the stat converts lane ranks to angles and time to radius, then
+renders in ordinary Cartesian space — no `coord_polar()` is used. Always
+pair with `coord_fixed()` to preserve the circular shape.
+
+---
+
+## 8. Basic circular plot
+
+Map `colour` to the measurement value, just as with `geom_kodom_line()`.
+Add `coord_fixed()` and `theme_kodom_circular()`.
+
+```{r circular-basic, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular() +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = "Circular swimlane — 25 patients")
+```
+
+Each spoke is one patient. Time increases outward; teal (low HbA1c) and red
+(high) are drawn as smooth gradients along each spoke.
+
+---
+
+## 9. Lane ordering and the visual effect on the flower
+
+`sort_by` controls the angular order of spokes. `"mean"` groups similar
+patients into arcs of the same hue, revealing structure that `"none"` scatters
+randomly.
+
+```{r circular-sort-none, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular(sort_by = "none") +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = 'sort_by = "none" — random spoke order')
+```
+
+```{r circular-sort-mean, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular(sort_by = "mean") +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = 'sort_by = "mean" — high-mean spokes cluster together')
+```
+
+---
+
+## 10. The seam gap with `gap_fraction`
+
+`gap_fraction` (default `0.15`) leaves an empty wedge at the ordering seam
+so the first and last subject are clearly separated. Increase it for a
+fan/semicircle layout; reduce it toward `0` for a nearly complete ring.
+
+```{r circular-gap-small, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular(sort_by = "mean", gap_fraction = 0.03) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = "gap_fraction = 0.03 — near-complete ring")
+```
+
+```{r circular-gap-large, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular(sort_by = "mean", gap_fraction = 0.35) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = "gap_fraction = 0.35 — fan layout")
+```
+
+---
+
+## 11. Hollow centre with `inner_fraction`
+
+`inner_fraction` (default `0.3`) adds a radial buffer so that subjects with
+short follow-up are not collapsed to a dot at the origin. Increase it for
+more whitespace; set it to `0` to start spokes at the centre.
+
+```{r circular-inner-small, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular(sort_by = "mean", inner_fraction = 0) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = "inner_fraction = 0 — spokes from the centre")
+```
+
+```{r circular-inner-large, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular(sort_by = "mean", inner_fraction = 0.6) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = "inner_fraction = 0.6 — wide hollow centre")
+```
+
+---
+
+## 12. Clockwise vs. counter-clockwise with `direction`
+
+`direction = 1L` (default) places lanes clockwise from the top.
+`direction = -1L` reverses the ordering.
+
+```{r circular-ccw, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular(sort_by = "mean", direction = -1L) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = "direction = -1L — counter-clockwise")
+```
+
+---
+
+## 13. Suppressing or resizing observation points
+
+`show_points = FALSE` removes the markers, leaving only the gradient path.
+`size` controls point size exactly as in `geom_kodom_line()`. A smaller
+default (`size = 2.0`) suits the compact circular layout.
+
+```{r circular-no-points, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular(sort_by = "mean", show_points = FALSE) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = "show_points = FALSE — gradient paths only")
+```
+
+```{r circular-big-points, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular(sort_by = "mean", size = 3.5, linewidth = 0.3) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = "Larger points, thinner paths")
+```
+
+---
+
+## 14. Large cohort — circular as a population fingerprint
+
+With 100 subjects the individual spokes pack tightly, creating a dense ring
+that functions as a population-level visual fingerprint. Suppressing points
+and using thin paths keeps the display legible.
+
+```{r circular-large, fig.height = 8}
+ggplot(df_large, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular(
+    sort_by     = "mean",
+    show_points = FALSE,
+    linewidth   = 0.4,
+    gap_fraction = 0.08
+  ) +
+  scale_colour_kodom(
+    discretize   = TRUE,
+    color_breaks = c(5.7, 6.5, 8),
+    name         = "HbA1c (%)"
+  ) +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = "100 patients — population fingerprint")
+```
+
+Subjects with high mean HbA1c cluster in one arc; well-controlled patients
+occupy the opposite arc. The colour ring makes the population split visible
+at a glance.
+
+---
+
+## 15. Combining circular and heatmap: a side-by-side summary
+
+The two layouts are complementary. Use `patchwork` (or `gridExtra`) to place
+them together for a publication-ready comparison panel.
+
+```{r combined, fig.height = 6, message = FALSE}
+library(patchwork)
+
+p_heat <- ggplot(df_small, aes(x = visit_month, id = subject_id, fill = hba1c)) +
+  geom_kodom_heatmap(bins = 6, sort_by = "mean") +
+  scale_fill_kodom(name = "HbA1c (%)") +
+  labs(x = "Visit (months)", y = "", title = "Heatmap") +
+  theme_kodom(legend_position = "bottom")
+
+p_circ <- ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_circular(sort_by = "mean", show_points = FALSE) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = "Circular")
+
+p_heat + p_circ
+```

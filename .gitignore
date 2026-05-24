@@ -13,12 +13,14 @@
 
 # Example code in package build process
 *-Ex.R
+*-Ex.pdf
 
 # Output files from R CMD build
 /*.tar.gz
 
 # Output files from R CMD check
 /*.Rcheck/
+*.Rcheck/
 
 # RStudio files
 .Rproj.user/
@@ -43,6 +45,9 @@ vignettes/*.pdf
 
 # pkgdown site
 docs/
+inst/doc
+/doc/
+/Meta/
 
 # translation temp files
 po/*~
@@ -62,3 +67,5 @@ scripts/outfiles/
 # Claude Code session caveat captures
 *-local-command-caveatcaveat-the-messages-below.txt
 .positai
+
+

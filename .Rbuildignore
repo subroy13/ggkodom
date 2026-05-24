@@ -1,0 +1,17 @@
+^data-raw$
+^.*\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^info\.md$
+^README\.Rmd$
+^tests/smoke_check\.R$
+^tests/visual_check\.R$
+^tests/visual_check\.pdf$
+^doc$
+^Meta$
+^\.claude$
+^ggkodom\.Rcheck$
+^ggkodom.*\.tar\.gz$
+^ggkodom-Ex\.pdf$
+^TODO\.md$
+^action_items\.md$
