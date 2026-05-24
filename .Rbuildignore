@@ -1,9 +1,11 @@
 ^data-raw$
+^devtools$
 ^.*\.Rproj$
 ^\.Rproj\.user$
 ^LICENSE\.md$
 ^info\.md$
 ^README\.Rmd$
+^Readme\.md$
 ^tests/smoke_check\.R$
 ^tests/visual_check\.R$
 ^tests/visual_check\.pdf$

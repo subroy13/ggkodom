@@ -21,8 +21,8 @@ whose radial spoke structure inspired the circular layout.
 ## Installation
 
 ``` r
-# install.packages("pak")
-pak::pak("washu-datathon-2026/ggkodom") # GitHub (adjust to your remote)
+# install.packages("devtools")
+devtools::install_github("subroy13/ggkodom") # GitHub (adjust to your remote)
 ```
 
 ## Quick start
