@@ -160,7 +160,8 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, fill = hba1c)) +
     sort_by = "mean"
   ) +
   scale_fill_kodom(name = "HbA1c (%)") +
-  labs(x = "Study quarter", y = "", title = 'fun = "first" — earliest reading per window') +
+  labs(x = "Study quarter", y = "",
+       title = 'fun = "first" — earliest reading per window') +
   theme_kodom()
 ```
 
@@ -172,7 +173,8 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, fill = hba1c)) +
     sort_by = "mean"
   ) +
   scale_fill_kodom(name = "HbA1c (%)") +
-  labs(x = "Study quarter", y = "", title = 'fun = "max" — peak reading per window') +
+  labs(x = "Study quarter", y = "",
+       title = 'fun = "max" — peak reading per window') +
   theme_kodom()
 ```
 
@@ -444,13 +446,17 @@ them together for a publication-ready comparison panel.
 ```{r combined, fig.height = 6, message = FALSE}
 library(patchwork)
 
-p_heat <- ggplot(df_small, aes(x = visit_month, id = subject_id, fill = hba1c)) +
+p_heat <- ggplot(
+  df_small, aes(x = visit_month, id = subject_id, fill = hba1c)
+) +
   geom_kodom_heatmap(bins = 6, sort_by = "mean") +
   scale_fill_kodom(name = "HbA1c (%)") +
   labs(x = "Visit (months)", y = "", title = "Heatmap") +
   theme_kodom(legend_position = "bottom")
 
-p_circ <- ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+p_circ <- ggplot(
+  df_small, aes(x = visit_month, id = subject_id, colour = hba1c)
+) +
   geom_kodom_circular(sort_by = "mean", show_points = FALSE) +
   scale_colour_kodom(name = "HbA1c (%)") +
   coord_fixed() +
@@ -477,10 +483,14 @@ Key difference from `geom_kodom_circular()`:
 - **Periodic**: angle = time within the cycle; radius increases slowly to
   separate successive cycles of the same subject.
 
-Always pair with `coord_kodom_periodic()` (a thin wrapper around
-`coord_polar()`) and `theme_kodom_periodic()`. Because the stat outputs
-`x = time mod period` and `y = radius`, standard ggplot2 scales work
-directly — use `scale_x_continuous()` to label positions around the ring.
+Every plot needs three companion calls alongside the geom:
+
+- `scale_y_kodom_periodic()` — pins `y = 0` at the centre so the
+  `inner_fraction` hollow gap is visible (without it, ggplot2 auto-ranges
+  from the minimum data radius and the hole disappears).
+- `coord_kodom_periodic()` — thin wrapper around `coord_polar(theta = "x",
+  start = pi/2, direction = -1)`.
+- `scale_x_continuous()` — labels the angular axis (month names, hours, etc.).
 
 ---
 
@@ -494,6 +504,7 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 12) +
   scale_x_continuous(breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
+  scale_y_kodom_periodic() +
   coord_kodom_periodic() +
   theme_kodom_periodic() +
   labs(title = "Star-trail plot — 25 patients, period = 12 months")
@@ -515,6 +526,7 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 12, spiral_fraction = 0) +
   scale_x_continuous(breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
+  scale_y_kodom_periodic() +
   coord_kodom_periodic() +
   theme_kodom_periodic() +
   labs(title = "spiral_fraction = 0 — year 1 and year 2 overlap on one ring")
@@ -525,6 +537,7 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 12, spiral_fraction = 0.4) +
   scale_x_continuous(breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
+  scale_y_kodom_periodic() +
   coord_kodom_periodic() +
   theme_kodom_periodic() +
   labs(title = "spiral_fraction = 0.4 — wider separation between cycles")
@@ -547,6 +560,7 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 6, spiral_fraction = 0.15) +
   scale_x_continuous(breaks = 1:6, labels = month.abb[1:6]) +
   scale_colour_kodom(name = "HbA1c (%)") +
+  scale_y_kodom_periodic() +
   coord_kodom_periodic() +
   theme_kodom_periodic() +
   labs(title = "period = 6 — four half-year arcs per subject")
@@ -558,9 +572,10 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   scale_x_continuous(breaks = seq(0, 21, by = 3),
                      labels = paste0("M", seq(0, 21, by = 3))) +
   scale_colour_kodom(name = "HbA1c (%)") +
+  scale_y_kodom_periodic() +
   coord_kodom_periodic() +
   theme_kodom_periodic() +
-  labs(title = "period = 24 — single sweep, no spiral (like geom_kodom_circular)")
+  labs(title = "period = 24 — single sweep, no spiral (like circular)")
 ```
 
 When `period` equals total follow-up and `spiral_fraction = 0` the output
@@ -579,6 +594,7 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 12, sort_by = "mean") +
   scale_x_continuous(breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
+  scale_y_kodom_periodic() +
   coord_kodom_periodic() +
   theme_kodom_periodic() +
   labs(title = 'sort_by = "mean" — similar subjects on adjacent rings')
@@ -586,12 +602,32 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
 
 ---
 
-## 20. Suppressing points, hollow centre, and counter-clockwise direction
+## 20. Ring spacing with `lane_width`, and counter-clockwise direction
 
-`show_points = FALSE` removes observation markers, leaving only arcs.
-`inner_fraction` (default `0.3`) adds empty radial space at the centre.
-Pass `clockwise = FALSE` to `coord_kodom_periodic()` to reverse the sweep
-direction — the same knob as `coord_polar(direction = 1)`.
+`lane_width` (default `1`) multiplies the radial gap between adjacent subject
+rings. The hollow centre (`inner_fraction`) is deliberately *not* scaled, so
+the hole size stays anchored to the cohort size while the rings spread apart.
+This pairs naturally with `n_max` to spotlight a readable subset.
+
+```{r periodic-lane-width, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_periodic(
+    period         = 12,
+    sort_by        = "mean",
+    show_points    = FALSE,
+    n_max          = 10,
+    lane_width     = 3
+  ) +
+  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  scale_y_kodom_periodic() +
+  coord_kodom_periodic() +
+  theme_kodom_periodic() +
+  labs(title = "10 subjects, lane_width = 3 — each arc clearly separated")
+```
+
+`show_points = FALSE` leaves only arcs. Pass `clockwise = FALSE` to
+`coord_kodom_periodic()` to reverse the sweep direction.
 
 ```{r periodic-no-points, fig.height = 7}
 ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
@@ -603,6 +639,7 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   ) +
   scale_x_continuous(breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
+  scale_y_kodom_periodic() +
   coord_kodom_periodic(clockwise = FALSE) +
   theme_kodom_periodic() +
   labs(title = "Arcs only, wide hollow centre, counter-clockwise")
@@ -630,6 +667,7 @@ ggplot(df_large, aes(x = visit_month, id = subject_id, colour = hba1c)) +
     color_breaks = c(5.7, 6.5, 8),
     name         = "HbA1c (%)"
   ) +
+  scale_y_kodom_periodic() +
   coord_kodom_periodic() +
   theme_kodom_periodic() +
   labs(title = "100 patients — star-trail population fingerprint")
@@ -675,6 +713,7 @@ p_peri <- ggplot(
   ) +
   scale_x_continuous(breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
+  scale_y_kodom_periodic() +
   coord_kodom_periodic() +
   theme_kodom_periodic() +
   labs(title = "Periodic")

@@ -116,6 +116,39 @@ test_that("n_max subsamples subjects", {
   expect_lte(length(unique(out$id)), 2L)
 })
 
+# ---- lane_width ----
+
+test_that("lane_width > 1 produces larger inter-ring gaps", {
+  out1 <- do.call(compute, modifyList(default_args, list(lane_width = 1)))
+  out3 <- do.call(compute, modifyList(default_args, list(lane_width = 3)))
+  # Gap between lane-1 and lane-2 minimum radii should be 3× larger
+  min1 <- sort(tapply(out1$y, out1$id, min))
+  min3 <- sort(tapply(out3$y, out3$id, min))
+  expect_equal(as.numeric(diff(min3)[1] / diff(min1)[1]), 3, tolerance = 1e-9)
+})
+
+test_that("lane_width does not affect inner_radius (hole stays anchored)", {
+  # inner_radius = 0.3 * 3 = 0.9, unchanged regardless of lane_width.
+  # Innermost lane (lane=1) at time=0 (spiral=0):
+  #   lane_width=1 → y = 0.9 + 1*1 = 1.9
+  #   lane_width=5 → y = 0.9 + 1*5 = 5.9  (diff = 4, not 4*0.9+4=7.6)
+  out1 <- do.call(compute, modifyList(default_args, list(lane_width = 1)))
+  out5 <- do.call(compute, modifyList(default_args, list(lane_width = 5)))
+  expect_equal(min(out5$y) - min(out1$y), 4, tolerance = 1e-6)
+})
+
+test_that("lane_width = 1 is identical to the default output", {
+  out_default <- do.call(compute, default_args)
+  out_w1      <- do.call(compute, modifyList(default_args, list(lane_width = 1)))
+  expect_equal(out_default$y, out_w1$y)
+})
+
+test_that("plot builds with varied lane_width values", {
+  for (lw in c(0.5, 1, 2, 4)) {
+    expect_no_error(ggplot2::ggplot_build(base_plot(lane_width = lw)))
+  }
+})
+
 # ---- period-boundary group-breaking (now in stat) ----
 
 test_that("compute_panel breaks groups at period boundaries", {

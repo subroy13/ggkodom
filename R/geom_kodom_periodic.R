@@ -6,7 +6,7 @@
 #'
 #' Assigns lane positions, converts time to an angle within one period
 #' (`x = time mod period`), and converts lane rank to an Archimedean spiral
-#' radius (`y = inner_radius + lane + spiral_fraction * total_time / period`).
+#' radius (`y = inner_radius + lane * lane_width + spiral_fraction * total_time / period`).
 #' The stat also breaks groups at period boundaries so that
 #' `.kodom_build_segments` never connects the end of one cycle to the start
 #' of the next. After this transform, `coord_polar(theta = "x")` renders the
@@ -20,9 +20,12 @@ StatKodomPeriodic <- ggplot2::ggproto("StatKodomPeriodic", StatKodomBase,
                              sort_by = "none", n_max = Inf,
                              period = 12,
                              inner_fraction = 0.3,
-                             spiral_fraction = 0.1) {
+                             spiral_fraction = 0.1,
+                             lane_width = 1) {
         data         <- .kodom_assign_lanes(data, sort_by = sort_by, n_max = n_max)
         n_lanes      <- max(data$y, na.rm = TRUE)
+        # inner_radius is intentionally NOT multiplied by lane_width so the
+        # hole size stays anchored to n_lanes regardless of spacing choice.
         inner_radius <- inner_fraction * n_lanes
 
         # Break groups at period boundaries (uses original total time) so
@@ -30,9 +33,10 @@ StatKodomPeriodic <- ggplot2::ggproto("StatKodomPeriodic", StatKodomBase,
         # backward-going chord across the ring.
         data$group <- data$group * 1000L + as.integer(floor(data$x / period))
 
-        # Archimedean spiral radius: base lane position + outward drift.
-        # Uses original total time before it is reduced modulo period.
-        data$y <- inner_radius + data$y + spiral_fraction * (data$x / period)
+        # Archimedean spiral radius: base lane position scaled by lane_width
+        # + outward drift. Uses original total time before modulo reduction.
+        data$y <- inner_radius + data$y * lane_width +
+            spiral_fraction * (data$x / period)
 
         # Angle within one cycle: map total time to [0, period).
         data$x <- data$x %% period
@@ -124,10 +128,18 @@ GeomKodomPeriodic <- ggplot2::ggproto("GeomKodomPeriodic", ggplot2::GeomPath,
 #' @param period Numeric. Length of one complete cycle (e.g. 12 for months,
 #'   24 for hours). Default `12`.
 #' @param spiral_fraction Numeric. Radial expansion per full cycle as a
-#'   fraction of one lane width. `0` keeps cycles on the same ring;
-#'   `0.1` (default) drifts outward by 10% of a lane per cycle.
+#'   fraction of one *original* lane width (i.e. before `lane_width` scaling).
+#'   `0` keeps cycles on the same ring; `0.1` (default) drifts outward by
+#'   10% of one lane per cycle.
 #' @param inner_fraction Fraction of total lanes used as a hollow inner buffer.
-#'   Default `0.3`.
+#'   Default `0.3`. Pair with [scale_y_kodom_periodic()] to make the hole
+#'   visible.
+#' @param lane_width Positive numeric. Multiplier for the radial distance
+#'   between adjacent subject rings. Default `1` packs rings at unit spacing.
+#'   Increase (e.g. `3`) to spread rings apart so each subject's arc is more
+#'   legible — particularly useful when using `n_max` to show a small subset.
+#'   The hollow centre (`inner_fraction`) is intentionally not scaled so the
+#'   hole size stays proportional to the cohort, not the spacing.
 #' @export
 geom_kodom_periodic <- function(mapping = NULL, data = NULL,
                                 stat = StatKodomPeriodic, position = "identity",
@@ -135,6 +147,7 @@ geom_kodom_periodic <- function(mapping = NULL, data = NULL,
                                 period = 12,
                                 spiral_fraction = 0.1,
                                 inner_fraction = 0.3,
+                                lane_width = 1,
                                 sort_by = "none",
                                 n_max = Inf,
                                 show_points = TRUE,
@@ -146,7 +159,7 @@ geom_kodom_periodic <- function(mapping = NULL, data = NULL,
         position = position, show.legend = show.legend, inherit.aes = inherit.aes,
         params = list(
             period = period, spiral_fraction = spiral_fraction,
-            inner_fraction = inner_fraction,
+            inner_fraction = inner_fraction, lane_width = lane_width,
             sort_by = sort_by, n_max = n_max,
             show_points = show_points, na.rm = na.rm, ...
         )

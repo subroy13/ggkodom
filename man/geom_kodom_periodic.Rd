@@ -13,6 +13,7 @@ geom_kodom_periodic(
   period = 12,
   spiral_fraction = 0.1,
   inner_fraction = 0.3,
+  lane_width = 1,
   sort_by = "none",
   n_max = Inf,
   show_points = TRUE,
@@ -36,11 +37,20 @@ geom_kodom_periodic(
 24 for hours). Default \code{12}.}
 
 \item{spiral_fraction}{Numeric. Radial expansion per full cycle as a
-fraction of one lane width. \code{0} keeps cycles on the same ring;
-\code{0.1} (default) drifts outward by 10\% of a lane per cycle.}
+fraction of one \emph{original} lane width (i.e. before \code{lane_width} scaling).
+\code{0} keeps cycles on the same ring; \code{0.1} (default) drifts outward by
+10\% of one lane per cycle.}
 
 \item{inner_fraction}{Fraction of total lanes used as a hollow inner buffer.
-Default \code{0.3}.}
+Default \code{0.3}. Pair with \code{\link[=scale_y_kodom_periodic]{scale_y_kodom_periodic()}} to make the hole
+visible.}
+
+\item{lane_width}{Positive numeric. Multiplier for the radial distance
+between adjacent subject rings. Default \code{1} packs rings at unit spacing.
+Increase (e.g. \code{3}) to spread rings apart so each subject's arc is more
+legible — particularly useful when using \code{n_max} to show a small subset.
+The hollow centre (\code{inner_fraction}) is intentionally not scaled so the
+hole size stays proportional to the cohort, not the spacing.}
 
 \item{sort_by}{Lane ordering. One of \code{"none"} (default), \code{"mean"},
 \code{"mean_asc"}, \code{"first"}, \code{"last"} — all refer to the \code{colour} variable.}

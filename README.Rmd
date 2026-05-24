@@ -33,7 +33,7 @@ The package is named after the Kadam flower (*Neolamarckia cadamba*), whose radi
 
 ```{r install, eval = FALSE}
 # install.packages("devtools")
-devtools::install_github("subroy13/ggkodom") # GitHub (adjust to your remote)
+devtools::install_github("subroy13/ggkodom")
 ```
 
 ## Quick start

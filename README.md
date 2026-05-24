@@ -22,13 +22,19 @@ whose radial spoke structure inspired the circular layout.
 
 ``` r
 # install.packages("devtools")
-devtools::install_github("subroy13/ggkodom") # GitHub (adjust to your remote)
+devtools::install_github("subroy13/ggkodom")
 ```
 
 ## Quick start
 
 ``` r
 library(ggkodom)
+#> কদম গাছে উঠিয়া আছে গোলমেলে ডেটা
+#> প্লট বানিয়ে সোজা করবে ggkodom-এর ব্যাটা!
+#> 
+#> (English Translation: Messy data has climbed the Kadam tree, but ggkodom's lad will straighten it out with a plot!)
+#> Welcome to ggkodom! 
+#> Version: 0.1.0
 library(ggplot2)
 #> Warning: package 'ggplot2' was built under R version 4.5.2
 
