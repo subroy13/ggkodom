@@ -356,3 +356,14 @@ When submitting, CRAN will ask you to confirm:
 | P2 | Ship example dataset in `data/` | Recommended |
 | P2 | Add `inst/CITATION` | Recommended |
 | P2 | Increase test coverage (correctness assertions) | Recommended |
+
+# Ideas
+
+- Initial startup message in bengali: "কদম গাছে উঠিয়া আছে গোলমেলে ডেটা, প্লট বানিয়ে সোজা করবে ggkodom-এর ব্যাটা!"
+      English Translation: "Messy data has climbed the Kadam tree, but ggkodom's lad will straighten it out with a plot!"
+- Spacing / gap change in geom_ objects
+- Convert normal gg things to geom_object
+- Shape should be associated with a variable
+- First point can be aligned to 0.
+- Reorganize the repo structure.
+- 
