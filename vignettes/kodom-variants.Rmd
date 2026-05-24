@@ -1,8 +1,8 @@
 ---
-title: "Heatmap and Circular Variants: geom_kodom_heatmap and geom_kodom_circular"
+title: "Heatmap, Circular, and Periodic Variants"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Heatmap and Circular Variants: geom_kodom_heatmap and geom_kodom_circular}
+  %\VignetteIndexEntry{Heatmap, Circular, and Periodic Variants}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -10,8 +10,8 @@ vignette: >
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment  = "#>",
-  fig.width  = 10,
+  comment = "#>",
+  fig.width = 10,
   fig.height = 6,
   dpi = 300,
   out.width = "100%"
@@ -20,15 +20,16 @@ library(ggkodom)
 library(ggplot2)
 ```
 
-This vignette covers `geom_kodom_heatmap()` and `geom_kodom_circular()` — two
-layouts built on the same aesthetic contract as `geom_kodom_line()` (see the
-companion vignette for path-specific features: lane ordering, point shapes,
-independent `size`/`linewidth`, etc.).
+This vignette covers `geom_kodom_heatmap()`, `geom_kodom_circular()`, and
+`geom_kodom_periodic()` — three layouts built on the same aesthetic contract as
+`geom_kodom_line()` (see the companion vignette for path-specific features:
+lane ordering, point shapes, independent `size`/`linewidth`, etc.).
 
-The guiding principle: use the **heatmap** when the cohort is large or when
-per-observation timing matters less than overall trend; use the **circular**
-("Kodom") layout when you want all subjects visible simultaneously in a
-compact flower-like display.
+| Layout | Best for |
+|---|---|
+| **Heatmap** | Large cohorts; time windows as clinical milestones |
+| **Circular** | Medium cohorts; single sweep from baseline to end |
+| **Periodic** | Cyclical data; intra-cycle pattern *and* inter-cycle drift |
 
 ## Sample data
 
@@ -44,16 +45,16 @@ make_cohort <- function(n_subjects, seed = 42) {
   set.seed(seed)
   n_obs_per <- sample(6:12, n_subjects, replace = TRUE)
   do.call(rbind, lapply(seq_len(n_subjects), function(i) {
-    n     <- n_obs_per[i]
-    base  <- rnorm(1, mean = 7.5, sd = 1.2)
+    n <- n_obs_per[i]
+    base <- rnorm(1, mean = 7.5, sd = 1.2)
     trend <- rnorm(1, mean = -0.02, sd = 0.01)
-    time  <- sort(runif(n, 0, 24))
+    time <- sort(runif(n, 0, 24))
     value <- base + trend * time + rnorm(n, sd = 0.4)
     data.frame(
-      subject_id  = sprintf("P%03d", i),
+      subject_id = sprintf("P%03d", i),
       visit_month = time,
-      hba1c       = pmax(4, value),
-      arm         = ifelse(i <= round(n_subjects / 2), "Treatment", "Control"),
+      hba1c = pmax(4, value),
+      arm = ifelse(i <= round(n_subjects / 2), "Treatment", "Control"),
       stringsAsFactors = FALSE
     )
   }))
@@ -414,9 +415,9 @@ and using thin paths keeps the display legible.
 ```{r circular-large, fig.height = 8}
 ggplot(df_large, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_circular(
-    sort_by     = "mean",
+    sort_by = "mean",
     show_points = FALSE,
-    linewidth   = 0.4,
+    linewidth = 0.4,
     gap_fraction = 0.08
   ) +
   scale_colour_kodom(
@@ -457,4 +458,226 @@ p_circ <- ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)
   labs(title = "Circular")
 
 p_heat + p_circ
+```
+
+---
+
+# Part III — `geom_kodom_periodic()`
+
+`geom_kodom_periodic()` is built for **cyclical longitudinal data** —
+measurements that repeat with a known period (months in a year, hours in a
+day, seasonal study cycles). Each subject occupies a concentric ring; time
+maps to angle so that one full revolution equals one period. To avoid cycles
+overlapping exactly, the radius expands slowly as time progresses, creating a
+**star-trail** or spiral effect.
+
+Key difference from `geom_kodom_circular()`:
+
+- **Circular**: angle = subject identity; time increases outward along a spoke.
+- **Periodic**: angle = time within the cycle; radius increases slowly to
+  separate successive cycles of the same subject.
+
+Always pair with `coord_kodom_periodic()` (a thin wrapper around
+`coord_polar()`) and `theme_kodom_periodic()`. Because the stat outputs
+`x = time mod period` and `y = radius`, standard ggplot2 scales work
+directly — use `scale_x_continuous()` to label positions around the ring.
+
+---
+
+## 16. Basic star-trail plot with month labels
+
+With `period = 12` one revolution spans one year. `scale_x_continuous()` adds
+abbreviated month names around the ring — no separate annotation layer needed.
+
+```{r periodic-basic, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_periodic(period = 12) +
+  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_kodom_periodic() +
+  theme_kodom_periodic() +
+  labs(title = "Star-trail plot — 25 patients, period = 12 months")
+```
+
+Teal arcs (low HbA1c) hug the inner rings; red arcs sit further out. The gap
+between a subject's inner and outer arc reflects change across two full cycles.
+
+---
+
+## 17. Spiral expansion with `spiral_fraction`
+
+`spiral_fraction` (default `0.1`) is the radial increment per full cycle,
+expressed as a fraction of one lane width. Set it to `0` for pure concentric
+rings (cycles overlap); increase it to spread cycles farther apart.
+
+```{r periodic-spiral-zero, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_periodic(period = 12, spiral_fraction = 0) +
+  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_kodom_periodic() +
+  theme_kodom_periodic() +
+  labs(title = "spiral_fraction = 0 — year 1 and year 2 overlap on one ring")
+```
+
+```{r periodic-spiral-large, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_periodic(period = 12, spiral_fraction = 0.4) +
+  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_kodom_periodic() +
+  theme_kodom_periodic() +
+  labs(title = "spiral_fraction = 0.4 — wider separation between cycles")
+```
+
+Use `spiral_fraction = 0` for a tidy ring-per-subject summary when
+cycle-to-cycle change is not the focus; a larger value is better when you
+want to read the longitudinal trajectory across cycles.
+
+---
+
+## 18. Matching `period` to the data
+
+Match `period` to the natural cycle length of your data. Here `period = 6`
+produces half-year arcs (four visible per subject); `period = 24` sweeps the
+entire follow-up in one arc, eliminating any spiral.
+
+```{r periodic-period6, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_periodic(period = 6, spiral_fraction = 0.15) +
+  scale_x_continuous(breaks = 1:6, labels = month.abb[1:6]) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_kodom_periodic() +
+  theme_kodom_periodic() +
+  labs(title = "period = 6 — four half-year arcs per subject")
+```
+
+```{r periodic-period24, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_periodic(period = 24, spiral_fraction = 0) +
+  scale_x_continuous(breaks = seq(0, 21, by = 3),
+                     labels = paste0("M", seq(0, 21, by = 3))) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_kodom_periodic() +
+  theme_kodom_periodic() +
+  labs(title = "period = 24 — single sweep, no spiral (like geom_kodom_circular)")
+```
+
+When `period` equals total follow-up and `spiral_fraction = 0` the output
+resembles `geom_kodom_circular()` — useful as a sanity check.
+
+---
+
+## 19. Lane ordering with `sort_by`
+
+`sort_by = "mean"` groups subjects with similar average HbA1c onto adjacent
+rings, creating concentric bands of the same hue that are easy to read as
+population strata.
+
+```{r periodic-sort-mean, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_periodic(period = 12, sort_by = "mean") +
+  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_kodom_periodic() +
+  theme_kodom_periodic() +
+  labs(title = 'sort_by = "mean" — similar subjects on adjacent rings')
+```
+
+---
+
+## 20. Suppressing points, hollow centre, and counter-clockwise direction
+
+`show_points = FALSE` removes observation markers, leaving only arcs.
+`inner_fraction` (default `0.3`) adds empty radial space at the centre.
+Pass `clockwise = FALSE` to `coord_kodom_periodic()` to reverse the sweep
+direction — the same knob as `coord_polar(direction = 1)`.
+
+```{r periodic-no-points, fig.height = 7}
+ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_periodic(
+    period         = 12,
+    sort_by        = "mean",
+    show_points    = FALSE,
+    inner_fraction = 0.5
+  ) +
+  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_kodom_periodic(clockwise = FALSE) +
+  theme_kodom_periodic() +
+  labs(title = "Arcs only, wide hollow centre, counter-clockwise")
+```
+
+---
+
+## 21. Large cohort — population star-trail fingerprint
+
+At 100 subjects the rings pack tightly into a dense spiral. Thin lines and
+suppressed points let the colour texture carry the information.
+
+```{r periodic-large, fig.height = 8}
+ggplot(df_large, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+  geom_kodom_periodic(
+    period          = 12,
+    sort_by         = "mean",
+    show_points     = FALSE,
+    linewidth       = 0.3,
+    spiral_fraction = 0.08
+  ) +
+  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_colour_kodom(
+    discretize   = TRUE,
+    color_breaks = c(5.7, 6.5, 8),
+    name         = "HbA1c (%)"
+  ) +
+  coord_kodom_periodic() +
+  theme_kodom_periodic() +
+  labs(title = "100 patients — star-trail population fingerprint")
+```
+
+Well-controlled patients (teal) form a compact inner band; poorly controlled
+patients (red) arc outward. Comparing inner arcs (year 1) to outer arcs
+(year 2) reveals whether the cohort's control improved or worsened over time.
+
+---
+
+## 22. All three layouts side by side
+
+`patchwork` makes it easy to present heatmap, circular, and periodic together
+as a complementary summary panel.
+
+```{r all-three, fig.height = 6, message = FALSE}
+library(patchwork)
+
+p_heat <- ggplot(
+  df_small, aes(x = visit_month, id = subject_id, fill = hba1c)
+) +
+  geom_kodom_heatmap(bins = 6, sort_by = "mean") +
+  scale_fill_kodom(name = "HbA1c (%)") +
+  labs(x = "Month", y = "", title = "Heatmap") +
+  theme_kodom(legend_position = "bottom")
+
+p_circ <- ggplot(
+  df_small, aes(x = visit_month, id = subject_id, colour = hba1c)
+) +
+  geom_kodom_circular(sort_by = "mean", show_points = FALSE) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_fixed() +
+  theme_kodom_circular() +
+  labs(title = "Circular")
+
+p_peri <- ggplot(
+  df_small, aes(x = visit_month, id = subject_id, colour = hba1c)
+) +
+  geom_kodom_periodic(
+    period = 12, sort_by = "mean",
+    show_points = FALSE, spiral_fraction = 0.2
+  ) +
+  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_colour_kodom(name = "HbA1c (%)") +
+  coord_kodom_periodic() +
+  theme_kodom_periodic() +
+  labs(title = "Periodic")
+
+p_heat + p_circ + p_peri + plot_layout(widths = c(1.4, 1, 1))
 ```
