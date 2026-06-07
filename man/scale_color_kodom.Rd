@@ -3,7 +3,7 @@
 \name{scale_color_kodom}
 \alias{scale_color_kodom}
 \alias{scale_colour_kodom}
-\title{Kodom color scale for the colour aesthetic}
+\title{Kodom color scale for the color aesthetic}
 \usage{
 scale_color_kodom(
   colors = kodom_colors(),
@@ -50,13 +50,13 @@ a continuous gradient washes out into a single hue.
 }
 \examples{
 \dontrun{
-ggplot(df, aes(x = time, id = subject_id, colour = value)) +
+ggplot(df, aes(x = time, id = subject_id, color = value)) +
   geom_kodom_line() +
-  scale_colour_kodom()
+  scale_color_kodom()
 
 # Discrete bands at clinical thresholds
-ggplot(df, aes(x = time, id = subject_id, colour = hba1c)) +
+ggplot(df, aes(x = time, id = subject_id, color = hba1c)) +
   geom_kodom_line() +
-  scale_colour_kodom(discretize = TRUE, color_breaks = c(5.7, 6.5))
+  scale_color_kodom(discretize = TRUE, color_breaks = c(5.7, 6.5))
 }
 }

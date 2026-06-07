@@ -58,7 +58,7 @@ kodom_step_scale <- function(aesthetic = c("color", "fill"),
 }
 
 
-#' Kodom color scale for the colour aesthetic
+#' Kodom color scale for the color aesthetic
 #'
 #' A ggplot2 color scale using the Kadam flower palette (teal -> gold -> red).
 #' Designed to compose with [geom_kodom_line()], [geom_kodom_heatmap()], and
@@ -80,14 +80,14 @@ kodom_step_scale <- function(aesthetic = c("color", "fill"),
 #' @export
 #' @examples
 #' \dontrun{
-#' ggplot(df, aes(x = time, id = subject_id, colour = value)) +
+#' ggplot(df, aes(x = time, id = subject_id, color = value)) +
 #'   geom_kodom_line() +
-#'   scale_colour_kodom()
+#'   scale_color_kodom()
 #'
 #' # Discrete bands at clinical thresholds
-#' ggplot(df, aes(x = time, id = subject_id, colour = hba1c)) +
+#' ggplot(df, aes(x = time, id = subject_id, color = hba1c)) +
 #'   geom_kodom_line() +
-#'   scale_colour_kodom(discretize = TRUE, color_breaks = c(5.7, 6.5))
+#'   scale_color_kodom(discretize = TRUE, color_breaks = c(5.7, 6.5))
 #' }
 scale_color_kodom <- function(colors = kodom_colors(),
                               color_breaks = NULL,
@@ -109,7 +109,7 @@ scale_colour_kodom <- scale_color_kodom
 
 #' Kodom fill scale for the fill aesthetic
 #'
-#' Identical behaviour to [scale_color_kodom()] but targets the `fill`
+#' Identical behavior to [scale_color_kodom()] but targets the `fill`
 #' aesthetic. Intended for use with [geom_kodom_heatmap()].
 #'
 #' @inheritParams scale_color_kodom

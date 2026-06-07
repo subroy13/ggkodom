@@ -49,7 +49,7 @@ visible.}
 between adjacent subject rings. Default \code{1} packs rings at unit spacing.
 Increase (e.g. \code{3}) to spread rings apart so each subject's arc is more
 legible — particularly useful when using \code{n_max} to show a small subset.
-The hollow centre (\code{inner_fraction}) is intentionally not scaled so the
+The hollow center (\code{inner_fraction}) is intentionally not scaled so the
 hole size stays proportional to the cohort, not the spacing.}
 
 \item{sort_by}{Lane ordering. One of \code{"none"} (default), \code{"mean"},
@@ -80,9 +80,11 @@ forming a star trail or Archimedean spiral.
 wrapper that sets \code{start = pi/2} (12 o'clock at \code{x = 0}) and
 \code{direction = -1} (clockwise) by default.
 
-\strong{Axis labels.} Because \code{x} is time within one cycle, standard ggplot2
-scale functions work directly:
+\strong{Axis labels.} Because \code{x} is continuous time, \code{ggplot2} will automatically
+expand the limits to cover the entire time range if you use standard scales,
+which alters the length of a full 360-degree rotation. To make one rotation
+exactly equal one \code{period}, use the included wrapper \code{\link[=scale_x_kodom_periodic]{scale_x_kodom_periodic()}}:
 
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{scale_x_continuous(breaks = 1:12, labels = month.abb, limits = c(0, 12))
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{scale_x_kodom_periodic(period = 12, breaks = 1:12, labels = month.abb)
 }\if{html}{\out{</div>}}
 }

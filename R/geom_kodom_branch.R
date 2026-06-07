@@ -32,7 +32,7 @@ StatKodomBranch <- ggplot2::ggproto(
                            branch_fraction = 0.7) {
     if (!"medication" %in% names(data)) data$medication <- NA_character_
 
-    data       <- .kodom_assign_lanes(data, sort_by = sort_by, n_max = n_max)
+    data <- .kodom_assign_lanes(data, sort_by = sort_by, n_max = n_max)
     # data$y is now the integer base lane rank (1, 2, ..., N)
 
     # Replace NA medication with "observed" so the linetype scale gets a real
@@ -42,7 +42,7 @@ StatKodomBranch <- ggplot2::ggproto(
     )
 
     med_levels <- setdiff(unique(data$medication), "observed")
-    K          <- length(med_levels)
+    K <- length(med_levels)
 
     # Integer sub-lane index: 0 = observed, 1..K = prediction arms.
     med_as_int <- if (K > 0L) {
@@ -56,7 +56,7 @@ StatKodomBranch <- ggplot2::ggproto(
 
     # Carry the integer lane and track label through to draw_panel so that
     # fork connectors can be computed without needing patient id.
-    data$kodom_lane  <- data$y   # integer, before lane_width scaling
+    data$kodom_lane <- data$y # integer, before lane_width scaling
     data$kodom_track <- data$medication
 
     # One unique group per (subject, medication) pair.
@@ -87,8 +87,8 @@ StatKodomBranch <- ggplot2::ggproto(
     }
 
     # Final y: (base_lane + sub_offset) * lane_width.
-    sub_step  <- if (K > 0L) branch_fraction / K else 0
-    data$y    <- (data$y + med_as_int * sub_step) * lane_width
+    sub_step <- if (K > 0L) branch_fraction / K else 0
+    data$y <- (data$y + med_as_int * sub_step) * lane_width
 
     data
   }
@@ -118,18 +118,16 @@ GeomKodomBranch <- ggplot2::ggproto(
       stroke    = 0.5
     )
   ),
-
   setup_data = function(data, params) {
-    data$id         <- NULL
+    data$id <- NULL
     data$medication <- NULL
     # kodom_lane and kodom_track are retained for fork computation.
     data
   },
-
   draw_panel = function(data, panel_params, coord,
                         show_points = TRUE, show_fork = TRUE,
                         lineend = "butt", na.rm = FALSE) {
-    seg_data  <- .kodom_build_segments(data)
+    seg_data <- .kodom_build_segments(data)
     line_grob <- if (is.null(seg_data) || nrow(seg_data) == 0L) {
       grid::nullGrob()
     } else {
@@ -145,34 +143,44 @@ GeomKodomBranch <- ggplot2::ggproto(
     if (show_fork && "kodom_lane" %in% names(data)) {
       fork_segs <- do.call(rbind, lapply(
         unique(data$kodom_lane), function(lane) {
-          ld       <- data[data$kodom_lane == lane, ]
+          ld <- data[data$kodom_lane == lane, ]
           obs_rows <- ld[ld$kodom_track == "observed", ]
           prd_rows <- ld[ld$kodom_track != "observed", ]
-          if (nrow(prd_rows) == 0L) return(NULL)
+          if (nrow(prd_rows) == 0L) {
+            return(NULL)
+          }
 
           fork_x <- min(prd_rows$x)
 
           # Observed y at the closest observed point at or before fork_x.
-          obs_before <- obs_rows[obs_rows$x <= fork_x, ]
+          obs_before <- obs_rows[obs_rows$x < fork_x, ]
           if (nrow(obs_before) == 0L) obs_before <- obs_rows
-          obs_ref    <- obs_before[which.max(obs_before$x), ]
+          fork_x_start <- max(obs_before$x)
+          obs_ref      <- obs_before[which.max(obs_before$x), ]
 
-          y_high <- max(prd_rows$y[prd_rows$x == fork_x])
-          if (is.na(y_high) || abs(y_high - obs_ref$y) < 1e-9) return(NULL)
+          # All prediction arms present at fork_x, one row each.
+          arms_at_fork <- prd_rows[prd_rows$x == fork_x, ]
+          if (nrow(arms_at_fork) == 0L) return(NULL)
 
-          data.frame(
-            x         = fork_x,
-            xend      = fork_x,
-            y         = obs_ref$y,
-            yend      = y_high,
-            colour    = obs_ref$colour,
-            alpha     = if (is.na(obs_ref$alpha)) 1 else obs_ref$alpha,
-            linewidth = obs_ref$linewidth,
-            linetype  = "solid",
-            PANEL     = ld$PANEL[1L],
-            group     = -lane,
-            stringsAsFactors = FALSE
-          )
+          # One diagonal spoke per arm: (fork_x_start, obs_y) → (fork_x, arm_y).
+          # This fans the connector out to every arm so none hangs unconnected.
+          do.call(rbind, lapply(seq_len(nrow(arms_at_fork)), function(i) {
+            arm_y <- arms_at_fork$y[i]
+            if (is.na(arm_y) || abs(arm_y - obs_ref$y) < 1e-9) return(NULL)
+            data.frame(
+              x         = fork_x_start,
+              xend      = fork_x,
+              y         = obs_ref$y,
+              yend      = arm_y,
+              colour    = obs_ref$colour,
+              alpha     = if (is.na(obs_ref$alpha)) 1 else obs_ref$alpha,
+              linewidth = obs_ref$linewidth,
+              linetype  = "solid",
+              PANEL     = ld$PANEL[1L],
+              group     = -(lane * 100L + i),
+              stringsAsFactors = FALSE
+            )
+          }))
         }
       ))
       if (!is.null(fork_segs) && nrow(fork_segs) > 0L) {
@@ -187,12 +195,15 @@ GeomKodomBranch <- ggplot2::ggproto(
       !all(is.na(data$shape)) &&
       !all(is.na(data$size) | data$size <= 0)
 
-    if (!draw_pts) return(grid::grobTree(line_grob, fork_grob))
+    if (!draw_pts) {
+      return(grid::grobTree(line_grob, fork_grob))
+    }
 
-    point_data           <- data
+    point_data <- data
     point_data$linewidth <- NULL
     point_grob <- ggplot2::GeomPoint$draw_panel(
-      point_data, panel_params, coord, na.rm = na.rm
+      point_data, panel_params, coord,
+      na.rm = na.rm
     )
     grid::grobTree(line_grob, fork_grob, point_grob)
   }
@@ -210,10 +221,12 @@ GeomKodomBranch <- ggplot2::ggproto(
 #' predicted row. The stat replaces `NA` with `"observed"` in its output so
 #' that the linetype scale receives a clean string for every row.
 #'
-#' **Linetype.** By default, ggplot2's discrete linetype scale assigns linetypes
-#' in the order levels appear: `"observed"` (solid) first, then each arm in
-#' data order. Override with:
+#' **Linetype.** Map `linetype = <arm_column>` in `aes()` **and** supply a
+#' `scale_linetype_manual()` so that the legend appears and the linetypes are
+#' exactly what you want. The stat converts `NA` (observed rows) to the string
+#' `"observed"` before the scale is applied, so target that key explicitly:
 #' ```r
+#' aes(linetype = arm, medication = arm)   # both point to the same column
 #' scale_linetype_manual(
 #'   values = c("observed" = "solid", "DrugA" = "dashed", "DrugB" = "dotted")
 #' )
@@ -259,8 +272,10 @@ GeomKodomBranch <- ggplot2::ggproto(
 #' @export
 #' @examples
 #' \dontrun{
-#' ggplot(df, aes(x = time, id = subject_id,
-#'                colour = hba1c, medication = arm)) +
+#' ggplot(df, aes(
+#'   x = time, id = subject_id,
+#'   colour = hba1c, linetype = arm, medication = arm
+#' )) +
 #'   geom_kodom_branch(sort_by = "mean", lane_width = 2) +
 #'   scale_linetype_manual(
 #'     values = c("observed" = "solid", "DrugA" = "dashed", "DrugB" = "dotted")

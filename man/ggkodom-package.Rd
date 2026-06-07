@@ -6,18 +6,16 @@
 \alias{ggkodom-package}
 \title{ggkodom: Visualize Individual Longitudinal Trajectories}
 \description{
-\if{html}{\figure{logo.png}{options: style='float: right' alt='logo' width='120'}}
-
 A ggplot2-based toolkit for visualizing individual-level longitudinal trajectories. Creates linear 'kodom' plots, circular 'kodom' plots, heatmaps, and state-ribbon charts for repeated-measures data. Each subject gets its own visual lane with measurements colored by value, revealing patterns across subjects and time. The circular variant resembles the Kadam flower (Neolamarckia cadamba).
 }
 \author{
-\strong{Maintainer}: Subrata Pal \email{subrata@iastate.edu}
+\strong{Maintainer}: Subhrajyoty Roy \email{subhrajyotyroy@gmail.com}
 
 Authors:
 \itemize{
   \item Ayoushman Bhattacharya
   \item Sayan Das
-  \item Subhrajyoty Roy
+  \item Subrata Pal
 }
 
 }

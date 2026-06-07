@@ -47,23 +47,23 @@ GeomKodomLine <- ggplot2::ggproto("GeomKodomLine", ggplot2::GeomPath,
       stroke    = 0.5
     )
   ),
-
+  rename_size = FALSE,
   setup_data = function(data, params) {
     data$id <- NULL
     data
   },
-
   draw_panel = function(data, panel_params, coord, show_points = TRUE,
                         lineend = "butt", na.rm = FALSE) {
     # PATH — linewidth drives segment stroke width.
     # .kodom_build_segments() copies only linewidth/linetype/colour/alpha into
     # seg_data, so size/shape/fill/stroke never reach GeomSegment.
-    seg_data  <- .kodom_build_segments(data)
+    seg_data <- .kodom_build_segments(data)
     line_grob <- if (is.null(seg_data) || nrow(seg_data) == 0L) {
       grid::nullGrob()
     } else {
       ggplot2::GeomSegment$draw_panel(seg_data, panel_params, coord,
-                                      lineend = lineend, na.rm = na.rm)
+        lineend = lineend, na.rm = na.rm
+      )
     }
 
     # Suppress points when show_points = FALSE, or when the user signals
@@ -72,14 +72,37 @@ GeomKodomLine <- ggplot2::ggproto("GeomKodomLine", ggplot2::GeomPath,
       !all(is.na(data$shape)) &&
       !all(is.na(data$size) | data$size <= 0)
 
-    if (!draw_pts) return(line_grob)
+    if (!draw_pts) {
+      return(line_grob)
+    }
 
     # POINTS — size/shape/fill/stroke drive the markers.
     # Drop linewidth: GeomPoint uses stroke for its border width, not linewidth.
-    point_data           <- data
+    point_data <- data
     point_data$linewidth <- NULL
     point_grob <- ggplot2::GeomPoint$draw_panel(point_data, panel_params,
-                                                coord, na.rm = na.rm)
+      coord,
+      na.rm = na.rm
+    )
+    grid::grobTree(line_grob, point_grob)
+  },
+  draw_key = function(data, params, size) {
+    line_data <- data
+    line_data$size <- NULL
+    line_grob <- ggplot2::draw_key_path(line_data, params, size)
+
+    show_points <- if (is.null(params$show_points)) TRUE else params$show_points
+    draw_pts <- show_points &&
+      !all(is.na(data$shape)) &&
+      !all(is.na(data$size) | data$size <= 0)
+
+    if (!draw_pts) {
+      return(line_grob)
+    }
+
+    point_data <- data
+    point_data$linewidth <- NULL
+    point_grob <- ggplot2::draw_key_point(point_data, params, size)
     grid::grobTree(line_grob, point_grob)
   }
 )
@@ -133,25 +156,25 @@ GeomKodomLine <- ggplot2::ggproto("GeomKodomLine", ggplot2::GeomPath,
 #'   theme_kodom()
 #' }
 geom_kodom_line <- function(mapping = NULL,
-                             data = NULL,
-                             stat = StatKodomLine,
-                             position = "identity",
-                             ...,
-                             sort_by = "none",
-                             n_max = Inf,
-                             show_points = TRUE,
-                             na.rm = FALSE,
-                             show.legend = NA,
-                             inherit.aes = TRUE) {
+                            data = NULL,
+                            stat = StatKodomLine,
+                            position = "identity",
+                            ...,
+                            sort_by = "none",
+                            n_max = Inf,
+                            show_points = TRUE,
+                            na.rm = FALSE,
+                            show.legend = NA,
+                            inherit.aes = TRUE) {
   ggplot2::layer(
-    data        = data,
-    mapping     = mapping,
-    stat        = stat,
-    geom        = GeomKodomLine,
-    position    = position,
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomKodomLine,
+    position = position,
     show.legend = show.legend,
     inherit.aes = inherit.aes,
-    params      = list(
+    params = list(
       sort_by     = sort_by,
       n_max       = n_max,
       show_points = show_points,

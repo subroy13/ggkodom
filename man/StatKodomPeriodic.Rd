@@ -11,12 +11,9 @@ A ggproto object.
 StatKodomPeriodic
 }
 \description{
-Assigns lane positions, converts time to an angle within one period
-(\verb{x = time mod period}), and converts lane rank to an Archimedean spiral
+Assigns lane positions and converts lane rank to an Archimedean spiral
 radius (\code{y = inner_radius + lane * lane_width + spiral_fraction * total_time / period}).
-The stat also breaks groups at period boundaries so that
-\code{.kodom_build_segments} never connects the end of one cycle to the start
-of the next. After this transform, \code{coord_polar(theta = "x")} renders the
-data as a star trail with no extra manual Cartesian conversion required.
+Time \code{x} is left continuous, and relies on \code{coord_polar(theta = "x")} to natively wrap
+the data in a 360 degree space for values extending past the \code{period}.
 }
 \keyword{internal}

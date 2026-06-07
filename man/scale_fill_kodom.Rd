@@ -30,7 +30,7 @@ at \code{color_breaks}.}
 A ggplot2 scale object.
 }
 \description{
-Identical behaviour to \code{\link[=scale_color_kodom]{scale_color_kodom()}} but targets the \code{fill}
+Identical behavior to \code{\link[=scale_color_kodom]{scale_color_kodom()}} but targets the \code{fill}
 aesthetic. Intended for use with \code{\link[=geom_kodom_heatmap]{geom_kodom_heatmap()}}.
 }
 \examples{

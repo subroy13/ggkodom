@@ -4,13 +4,10 @@
 
 #' Stat for geom_kodom_periodic
 #'
-#' Assigns lane positions, converts time to an angle within one period
-#' (`x = time mod period`), and converts lane rank to an Archimedean spiral
+#' Assigns lane positions and converts lane rank to an Archimedean spiral
 #' radius (`y = inner_radius + lane * lane_width + spiral_fraction * total_time / period`).
-#' The stat also breaks groups at period boundaries so that
-#' `.kodom_build_segments` never connects the end of one cycle to the start
-#' of the next. After this transform, `coord_polar(theta = "x")` renders the
-#' data as a star trail with no extra manual Cartesian conversion required.
+#' Time `x` is left continuous, and relies on `coord_polar(theta = "x")` to natively wrap
+#' the data in a 360 degree space for values extending past the `period`.
 #'
 #' @keywords internal
 #' @format A ggproto object.
@@ -22,24 +19,16 @@ StatKodomPeriodic <- ggplot2::ggproto("StatKodomPeriodic", StatKodomBase,
                              inner_fraction = 0.3,
                              spiral_fraction = 0.1,
                              lane_width = 1) {
-        data         <- .kodom_assign_lanes(data, sort_by = sort_by, n_max = n_max)
-        n_lanes      <- max(data$y, na.rm = TRUE)
+        data <- .kodom_assign_lanes(data, sort_by = sort_by, n_max = n_max)
+        n_lanes <- max(data$y, na.rm = TRUE)
         # inner_radius is intentionally NOT multiplied by lane_width so the
         # hole size stays anchored to n_lanes regardless of spacing choice.
         inner_radius <- inner_fraction * n_lanes
 
-        # Break groups at period boundaries (uses original total time) so
-        # .kodom_build_segments stops at the seam rather than drawing a
-        # backward-going chord across the ring.
-        data$group <- data$group * 1000L + as.integer(floor(data$x / period))
-
         # Archimedean spiral radius: base lane position scaled by lane_width
-        # + outward drift. Uses original total time before modulo reduction.
+        # + outward drift. Uses original total time so it continuously expands.
         data$y <- inner_radius + data$y * lane_width +
             spiral_fraction * (data$x / period)
-
-        # Angle within one cycle: map total time to [0, period).
-        data$x <- data$x %% period
 
         data
     }
@@ -78,7 +67,7 @@ GeomKodomPeriodic <- ggplot2::ggproto("GeomKodomPeriodic", ggplot2::GeomPath,
                           show_points = TRUE, lineend = "butt", na.rm = FALSE) {
         # Data is already in (angle = x mod period, radius = y) space.
         # coord_polar(theta = "x") handles the actual projection.
-        seg_data  <- .kodom_build_segments(data)
+        seg_data <- .kodom_build_segments(data)
         line_grob <- grid::nullGrob()
 
         if (!is.null(seg_data) && nrow(seg_data) > 0L) {
@@ -92,12 +81,15 @@ GeomKodomPeriodic <- ggplot2::ggproto("GeomKodomPeriodic", ggplot2::GeomPath,
             !all(is.na(data$shape)) &&
             !all(is.na(data$size) | data$size <= 0)
 
-        if (!draw_pts) return(line_grob)
+        if (!draw_pts) {
+            return(line_grob)
+        }
 
-        point_data           <- data
+        point_data <- data
         point_data$linewidth <- NULL
         point_grob <- ggplot2::GeomPoint$draw_panel(
-            point_data, panel_params, coord, na.rm = na.rm
+            point_data, panel_params, coord,
+            na.rm = na.rm
         )
 
         grid::grobTree(line_grob, point_grob)
@@ -118,10 +110,12 @@ GeomKodomPeriodic <- ggplot2::ggproto("GeomKodomPeriodic", ggplot2::GeomPath,
 #' wrapper that sets `start = pi/2` (12 o'clock at `x = 0`) and
 #' `direction = -1` (clockwise) by default.
 #'
-#' **Axis labels.** Because `x` is time within one cycle, standard ggplot2
-#' scale functions work directly:
+#' **Axis labels.** Because `x` is continuous time, `ggplot2` will automatically
+#' expand the limits to cover the entire time range if you use standard scales,
+#' which alters the length of a full 360-degree rotation. To make one rotation
+#' exactly equal one `period`, use the included wrapper [scale_x_kodom_periodic()]:
 #' ```r
-#' scale_x_continuous(breaks = 1:12, labels = month.abb, limits = c(0, 12))
+#' scale_x_kodom_periodic(period = 12, breaks = 1:12, labels = month.abb)
 #' ```
 #'
 #' @inheritParams geom_kodom_line
@@ -138,7 +132,7 @@ GeomKodomPeriodic <- ggplot2::ggproto("GeomKodomPeriodic", ggplot2::GeomPath,
 #'   between adjacent subject rings. Default `1` packs rings at unit spacing.
 #'   Increase (e.g. `3`) to spread rings apart so each subject's arc is more
 #'   legible — particularly useful when using `n_max` to show a small subset.
-#'   The hollow centre (`inner_fraction`) is intentionally not scaled so the
+#'   The hollow center (`inner_fraction`) is intentionally not scaled so the
 #'   hole size stays proportional to the cohort, not the spacing.
 #' @export
 geom_kodom_periodic <- function(mapping = NULL, data = NULL,

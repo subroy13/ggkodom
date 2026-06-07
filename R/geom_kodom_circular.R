@@ -15,24 +15,26 @@
 #' @keywords internal
 #' @format A ggproto object.
 StatKodomCircular <- ggplot2::ggproto("StatKodomCircular", StatKodomBase,
-
   compute_panel = function(data, scales,
                            sort_by = "none", n_max = Inf,
                            gap_fraction = 0.15, inner_fraction = 0.3,
                            direction = 1L) {
     data <- .kodom_assign_lanes(data, sort_by = sort_by, n_max = n_max)
 
-    n_ids   <- length(unique(data$y))
-    gap_n   <- max(1L, ceiling(n_ids * gap_fraction))
+    n_ids <- length(unique(data$y))
+    gap_n <- max(1L, ceiling(n_ids * gap_fraction))
     ang_max <- n_ids + gap_n
 
-    time_range   <- range(data$x, na.rm = TRUE)
+    time_range <- range(data$x, na.rm = TRUE)
     inner_buffer <- diff(time_range) * inner_fraction
-    radius       <- data$x + inner_buffer
+    radius <- data$x + inner_buffer
 
-    theta   <- pi / 2 - direction * 2 * pi * data$y / ang_max
-    data$x  <- radius * cos(theta)
-    data$y  <- radius * sin(theta)
+    theta <- pi / 2 - direction * 2 * pi * data$y / ang_max
+    data$x <- radius * cos(theta)
+    data$y <- radius * sin(theta)
+
+    # Save inner_buffer so draw_panel can construct reference rings
+    data$inner_buffer <- inner_buffer
 
     data
   }
@@ -53,7 +55,6 @@ StatKodomCircular <- ggplot2::ggproto("StatKodomCircular", StatKodomBase,
 #' @keywords internal
 #' @format A ggproto object.
 GeomKodomCircular <- ggplot2::ggproto("GeomKodomCircular", ggplot2::GeomPath,
-
   default_aes = modifyList(
     ggplot2::GeomPath$default_aes,
     list(
@@ -65,33 +66,56 @@ GeomKodomCircular <- ggplot2::ggproto("GeomKodomCircular", ggplot2::GeomPath,
       stroke    = 0.5
     )
   ),
-
   setup_data = function(data, params) {
     data$id <- NULL
     data
   },
-
   draw_panel = function(data, panel_params, coord, show_points = TRUE,
-                        lineend = "butt", na.rm = FALSE) {
-    seg_data  <- .kodom_build_segments(data)
+                        reference_rings = c(0), lineend = "butt", na.rm = FALSE) {
+    seg_data <- .kodom_build_segments(data)
     line_grob <- if (is.null(seg_data) || nrow(seg_data) == 0L) {
       grid::nullGrob()
     } else {
       ggplot2::GeomSegment$draw_panel(seg_data, panel_params, coord,
-                                      lineend = lineend, na.rm = na.rm)
+        lineend = lineend, na.rm = na.rm
+      )
     }
 
     draw_pts <- show_points &&
       !all(is.na(data$shape)) &&
       !all(is.na(data$size) | data$size <= 0)
 
-    if (!draw_pts) return(line_grob)
+    point_grob <- if (!draw_pts) {
+      grid::nullGrob()
+    } else {
+      point_data <- data
+      point_data$linewidth <- NULL
+      ggplot2::GeomPoint$draw_panel(point_data, panel_params,
+        coord,
+        na.rm = na.rm
+      )
+    }
 
-    point_data           <- data
-    point_data$linewidth <- NULL
-    point_grob <- ggplot2::GeomPoint$draw_panel(point_data, panel_params,
-                                                coord, na.rm = na.rm)
-    grid::grobTree(line_grob, point_grob)
+    # Draw reference rings for the specified time points
+    rings_grob <- if (!is.null(reference_rings) && length(reference_rings) > 0 && !is.null(data$inner_buffer)) {
+      inner_buf <- data$inner_buffer[1L]
+      radii <- reference_rings + inner_buf
+
+      origin <- coord$transform(data.frame(x = 0, y = 0), panel_params)
+      perim <- coord$transform(data.frame(x = radii, y = 0), panel_params)
+      r_npc <- abs(perim$x - origin$x)
+
+      grid::circleGrob(
+        x = origin$x,
+        y = origin$y,
+        r = r_npc,
+        gp = grid::gpar(col = "grey85", lty = "dashed", fill = NA, lwd = 0.5)
+      )
+    } else {
+      grid::nullGrob()
+    }
+
+    grid::grobTree(rings_grob, line_grob, point_grob)
   }
 )
 
@@ -99,7 +123,7 @@ GeomKodomCircular <- ggplot2::ggproto("GeomKodomCircular", ggplot2::GeomPath,
 #' Circular ("Kodom") swimlane plot for longitudinal trajectories
 #'
 #' Draws a radial plot where each subject occupies an angular spoke and
-#' time increases outward from the centre. Measurements are encoded as a
+#' time increases outward from the center. Measurements are encoded as a
 #' colour gradient along each radial path, interpolated between consecutive
 #' observations. The layout resembles a Kadam flower
 #' (*Neolamarckia cadamba*), giving the package its name.
@@ -138,6 +162,9 @@ GeomKodomCircular <- ggplot2::ggproto("GeomKodomCircular", ggplot2::GeomPath,
 #' @param show_points If `TRUE` (default), draws a point at every
 #'   observation. Set to `FALSE`, or map `shape = NA` / `size = 0`, to
 #'   suppress points.
+#' @param reference_rings Numeric vector of time points where concentric
+#'   reference rings should be drawn behind the data paths. By default, draws
+#'   a ring at `0` (baseline). Set to `NULL` to suppress rings.
 #' @param na.rm If `TRUE`, silently remove rows with missing required
 #'   aesthetics.
 #' @param show.legend Logical. Should this layer appear in the legend?
@@ -164,25 +191,27 @@ geom_kodom_circular <- function(mapping = NULL,
                                 inner_fraction = 0.3,
                                 direction = 1L,
                                 show_points = TRUE,
+                                reference_rings = c(0),
                                 na.rm = FALSE,
                                 show.legend = NA,
                                 inherit.aes = TRUE) {
   ggplot2::layer(
-    data        = data,
-    mapping     = mapping,
-    stat        = stat,
-    geom        = GeomKodomCircular,
-    position    = position,
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomKodomCircular,
+    position = position,
     show.legend = show.legend,
     inherit.aes = inherit.aes,
-    params      = list(
-      sort_by        = sort_by,
-      n_max          = n_max,
-      gap_fraction   = gap_fraction,
-      inner_fraction = inner_fraction,
-      direction      = direction,
-      show_points    = show_points,
-      na.rm          = na.rm,
+    params = list(
+      sort_by         = sort_by,
+      n_max           = n_max,
+      gap_fraction    = gap_fraction,
+      inner_fraction  = inner_fraction,
+      direction       = direction,
+      show_points     = show_points,
+      reference_rings = reference_rings,
+      na.rm           = na.rm,
       ...
     )
   )

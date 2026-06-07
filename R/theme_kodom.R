@@ -103,13 +103,13 @@ theme_kodom_circular <- function(base_size = 12) {
 theme_kodom_periodic <- function(base_size = 12) {
   ggplot2::theme_minimal(base_size = base_size) +
     ggplot2::theme(
-      axis.title       = ggplot2::element_blank(),
-      axis.text.y      = ggplot2::element_blank(),
-      axis.ticks.y     = ggplot2::element_blank(),
+      axis.title = ggplot2::element_blank(),
+      axis.text.y = ggplot2::element_blank(),
+      axis.ticks.y = ggplot2::element_blank(),
       panel.grid.major.y = ggplot2::element_blank(),
       panel.grid.minor = ggplot2::element_blank(),
-      legend.position  = "bottom",
-      plot.title       = ggplot2::element_text(hjust = 0.5)
+      legend.position = "bottom",
+      plot.title = ggplot2::element_text(hjust = 0.5)
     )
 }
 
@@ -145,17 +145,17 @@ coord_kodom_periodic <- function(clockwise = TRUE) {
 
 #' Radial scale for periodic Kodom plots
 #'
-#' In `coord_polar(theta = "x")`, ggplot2 sets the centre of the plot to the
+#' In `coord_polar(theta = "x")`, ggplot2 sets the center of the plot to the
 #' *minimum data y value*, not to zero. Because [geom_kodom_periodic()] stores
-#' the hollow-centre gap as an offset above zero (`inner_fraction * n_lanes`),
+#' the hollow-center gap as an offset above zero (`inner_fraction * n_lanes`),
 #' the gap is invisible without this scale: the auto-range simply absorbs it.
 #'
-#' This function pins `y = 0` at the centre by setting `limits = c(0, NA)`,
+#' This function pins `y = 0` at the center by setting `limits = c(0, NA)`,
 #' so the offset computed by `inner_fraction` becomes a visible donut hole.
 #' It should be added to every plot that uses [geom_kodom_periodic()].
 #'
 #' @param expand Passed to [ggplot2::scale_y_continuous()]. Default adds 5%
-#'   padding beyond the outermost ring and no padding at the centre.
+#'   padding beyond the outermost ring and no padding at the center.
 #' @return A [ggplot2::scale_y_continuous()] object.
 #' @export
 #' @examples
@@ -171,4 +171,44 @@ coord_kodom_periodic <- function(clockwise = TRUE) {
 scale_y_kodom_periodic <- function(
     expand = ggplot2::expansion(mult = c(0, 0.05))) {
   ggplot2::scale_y_continuous(limits = c(0, NA), expand = expand)
+}
+
+#' X-scale for periodic longitudinal plots
+#'
+#' This is a convenience wrapper around [ggplot2::scale_x_continuous()] that
+#' enforces `limits = c(0, period)` and uses `oob = scales::oob_keep`.
+#'
+#' **Why is this necessary?** To make exactly one cycle span exactly one
+#' 360-degree rotation in `coord_polar`, the scale limits *must* be set to the
+#' period length (e.g., `c(0, 12)`). However, standard ggplot2 `scale_x_continuous`
+#' will drop any data outside those limits. By setting `oob = scales::oob_keep`,
+#' we instruct ggplot2 to keep the data that exceeds the period. `coord_polar`
+#' then natively wraps those out-of-bounds values around the circle, creating
+#' beautiful, continuous Archimedean spirals!
+#'
+#' @param period The length of one complete cycle (e.g. `12` for months).
+#'   Must match the `period` argument passed to `geom_kodom_periodic()`.
+#'   Default `12`.
+#' @param breaks Passed to `scale_x_continuous()`. Default provides integer
+#'   breaks for the period.
+#' @param ... Additional arguments passed to [ggplot2::scale_x_continuous()],
+#'   such as `labels`.
+#' @return A [ggplot2::scale_x_continuous()] object.
+#' @export
+#' @examples
+#' \dontrun{
+#' ggplot(df, aes(x = visit_month, id = subject_id, colour = hba1c)) +
+#'   geom_kodom_periodic(period = 12) +
+#'   scale_x_kodom_periodic(period = 12, labels = month.abb) +
+#'   scale_y_kodom_periodic() +
+#'   coord_kodom_periodic() +
+#'   theme_kodom_periodic()
+#' }
+scale_x_kodom_periodic <- function(period = 12, breaks = 1:period, ...) {
+  ggplot2::scale_x_continuous(
+    breaks = breaks,
+    limits = c(0, period),
+    oob = scales::oob_keep,
+    ...
+  )
 }

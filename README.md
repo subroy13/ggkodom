@@ -6,7 +6,7 @@
 
 **ggkodom** is a ggplot2 extension for visualizing individual-level
 longitudinal trajectories. Each subject gets its own visual lane;
-measurements are encoded as a smooth colour gradient. Three layout geoms
+measurements are encoded as a smooth color gradient. Three layout geoms
 cover different analytical needs:
 
 | Geom | Best for |
@@ -32,7 +32,7 @@ library(ggkodom)
 #> কদম গাছে উঠিয়া আছে গোলমেলে ডেটা
 #> প্লট বানিয়ে সোজা করবে ggkodom-এর ব্যাটা!
 #> 
-#> (English Translation: Messy data has climbed the Kadam tree, but ggkodom's lad will straighten it out with a plot!)
+#> (English Translation: Messy data has climbed the Kodom tree, but ggkodom's lad will straighten it out with a plot!)
 #> Welcome to ggkodom! 
 #> Version: 0.1.0
 library(ggplot2)

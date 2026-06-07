@@ -11,8 +11,10 @@ A ggproto object.
 GeomKodomBranch
 }
 \description{
-Extends \link[ggplot2:Geom]{ggplot2::GeomPath} to draw branching trajectory plots. Drops the
-\code{id} and \code{medication} columns in \code{setup_data()} so ggplot2 does not warn
-about unknown aesthetics at draw time.
+Extends \link[ggplot2:Geom]{ggplot2::GeomPath} to draw branching trajectory plots. In addition
+to the interpolated colour-gradient path (via \code{.kodom_build_segments()}),
+draws a short vertical \strong{fork connector} at each subject's branch point —
+the first x that appears in a predicted arm — connecting the observed lane
+to the topmost prediction arm. Toggle with \code{show_fork}.
 }
 \keyword{internal}

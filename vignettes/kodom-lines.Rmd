@@ -11,9 +11,8 @@ vignette: >
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  fig.width = 10,
-  fig.height = 6,
-  dpi = 300,
+  fig.width = 7,
+  fig.height = 4.2,
   out.width = "100%"
 )
 library(ggkodom)

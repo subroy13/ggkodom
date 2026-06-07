@@ -16,6 +16,7 @@ geom_kodom_circular(
   inner_fraction = 0.3,
   direction = 1L,
   show_points = TRUE,
+  reference_rings = c(0),
   na.rm = FALSE,
   show.legend = NA,
   inherit.aes = TRUE
@@ -49,6 +50,10 @@ buffer so short-follow-up subjects remain visible. Default \code{0.3}.}
 observation. Set to \code{FALSE}, or map \code{shape = NA} / \code{size = 0}, to
 suppress points.}
 
+\item{reference_rings}{Numeric vector of time points where concentric
+reference rings should be drawn behind the data paths. By default, draws
+a ring at \code{0} (baseline). Set to \code{NULL} to suppress rings.}
+
 \item{na.rm}{If \code{TRUE}, silently remove rows with missing required
 aesthetics.}
 
@@ -61,7 +66,7 @@ A ggplot2 layer object.
 }
 \description{
 Draws a radial plot where each subject occupies an angular spoke and
-time increases outward from the centre. Measurements are encoded as a
+time increases outward from the center. Measurements are encoded as a
 colour gradient along each radial path, interpolated between consecutive
 observations. The layout resembles a Kadam flower
 (\emph{Neolamarckia cadamba}), giving the package its name.

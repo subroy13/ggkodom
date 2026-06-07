@@ -54,6 +54,14 @@
     pairs <- lapply(seq_len(n - 1L), function(i) {
       a0 <- if (is.na(gd$alpha[i]))        1 else gd$alpha[i]
       a1 <- if (is.na(gd$alpha[i + 1L]))  1 else gd$alpha[i + 1L]
+      
+      # Dashed lines reset their dash pattern at the start of every grid segment.
+      # If we break a dashed line into 20 tiny pieces, the pattern restarts 20 
+      # times, effectively drawing a solid line. To preserve the dash pattern, 
+      # we disable interpolation (n_interp = 1) for non-solid lines.
+      lt <- gd$linetype[i]
+      n_use <- if (!is.na(lt) && lt != "solid" && lt != "1" && lt != 1) 1L else n_interp
+
       .kodom_interp_pair(
         x0 = gd$x[i],        x1 = gd$x[i + 1L],
         y0 = gd$y[i],        y1 = gd$y[i + 1L],
@@ -63,7 +71,7 @@
         linetype  = gd$linetype[i],
         PANEL     = gd$PANEL[1L],
         group     = gd$group[i],
-        n_interp  = n_interp
+        n_interp  = n_use
       )
     })
     do.call(rbind, pairs)

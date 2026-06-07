@@ -8,19 +8,19 @@ scale_y_kodom_periodic(expand = ggplot2::expansion(mult = c(0, 0.05)))
 }
 \arguments{
 \item{expand}{Passed to \code{\link[ggplot2:scale_continuous]{ggplot2::scale_y_continuous()}}. Default adds 5\%
-padding beyond the outermost ring and no padding at the centre.}
+padding beyond the outermost ring and no padding at the center.}
 }
 \value{
 A \code{\link[ggplot2:scale_continuous]{ggplot2::scale_y_continuous()}} object.
 }
 \description{
-In \code{coord_polar(theta = "x")}, ggplot2 sets the centre of the plot to the
+In \code{coord_polar(theta = "x")}, ggplot2 sets the center of the plot to the
 \emph{minimum data y value}, not to zero. Because \code{\link[=geom_kodom_periodic]{geom_kodom_periodic()}} stores
-the hollow-centre gap as an offset above zero (\code{inner_fraction * n_lanes}),
+the hollow-center gap as an offset above zero (\code{inner_fraction * n_lanes}),
 the gap is invisible without this scale: the auto-range simply absorbs it.
 }
 \details{
-This function pins \code{y = 0} at the centre by setting \code{limits = c(0, NA)},
+This function pins \code{y = 0} at the center by setting \code{limits = c(0, NA)},
 so the offset computed by \code{inner_fraction} becomes a visible donut hole.
 It should be added to every plot that uses \code{\link[=geom_kodom_periodic]{geom_kodom_periodic()}}.
 }

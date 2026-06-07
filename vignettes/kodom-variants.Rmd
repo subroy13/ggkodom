@@ -11,9 +11,8 @@ vignette: >
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  fig.width = 10,
-  fig.height = 6,
-  dpi = 300,
+  fig.width = 7,
+  fig.height = 4.2,
   out.width = "100%"
 )
 library(ggkodom)
@@ -160,8 +159,10 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, fill = hba1c)) +
     sort_by = "mean"
   ) +
   scale_fill_kodom(name = "HbA1c (%)") +
-  labs(x = "Study quarter", y = "",
-       title = 'fun = "first" — earliest reading per window') +
+  labs(
+    x = "Study quarter", y = "",
+    title = 'fun = "first" — earliest reading per window'
+  ) +
   theme_kodom()
 ```
 
@@ -173,8 +174,10 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, fill = hba1c)) +
     sort_by = "mean"
   ) +
   scale_fill_kodom(name = "HbA1c (%)") +
-  labs(x = "Study quarter", y = "",
-       title = 'fun = "max" — peak reading per window') +
+  labs(
+    x = "Study quarter", y = "",
+    title = 'fun = "max" — peak reading per window'
+  ) +
   theme_kodom()
 ```
 
@@ -280,7 +283,7 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   scale_colour_kodom(name = "HbA1c (%)") +
   coord_fixed() +
   theme_kodom_circular() +
-  labs(title = "Circular swimlane — 25 patients")
+  labs(title = "Circular Kodom Layout — 25 patients")
 ```
 
 Each spoke is one patient. Time increases outward; teal (low HbA1c) and red
@@ -496,13 +499,13 @@ Every plot needs three companion calls alongside the geom:
 
 ## 16. Basic star-trail plot with month labels
 
-With `period = 12` one revolution spans one year. `scale_x_continuous()` adds
+With `period = 12` one revolution spans one year. `scale_x_kodom_periodic()` adds
 abbreviated month names around the ring — no separate annotation layer needed.
 
 ```{r periodic-basic, fig.height = 7}
 ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 12) +
-  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_x_kodom_periodic(period = 12, breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
   scale_y_kodom_periodic() +
   coord_kodom_periodic() +
@@ -524,7 +527,7 @@ rings (cycles overlap); increase it to spread cycles farther apart.
 ```{r periodic-spiral-zero, fig.height = 7}
 ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 12, spiral_fraction = 0) +
-  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_x_kodom_periodic(period = 12, breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
   scale_y_kodom_periodic() +
   coord_kodom_periodic() +
@@ -535,7 +538,7 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
 ```{r periodic-spiral-large, fig.height = 7}
 ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 12, spiral_fraction = 0.4) +
-  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_x_kodom_periodic(period = 12, breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
   scale_y_kodom_periodic() +
   coord_kodom_periodic() +
@@ -558,7 +561,7 @@ entire follow-up in one arc, eliminating any spiral.
 ```{r periodic-period6, fig.height = 7}
 ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 6, spiral_fraction = 0.15) +
-  scale_x_continuous(breaks = 1:6, labels = month.abb[1:6]) +
+  scale_x_kodom_periodic(period = 6, breaks = 1:6, labels = month.abb[1:6]) +
   scale_colour_kodom(name = "HbA1c (%)") +
   scale_y_kodom_periodic() +
   coord_kodom_periodic() +
@@ -569,8 +572,11 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
 ```{r periodic-period24, fig.height = 7}
 ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 24, spiral_fraction = 0) +
-  scale_x_continuous(breaks = seq(0, 21, by = 3),
-                     labels = paste0("M", seq(0, 21, by = 3))) +
+  scale_x_kodom_periodic(
+    period = 24,
+    breaks = seq(0, 21, by = 3),
+    labels = paste0("M", seq(0, 21, by = 3))
+  ) +
   scale_colour_kodom(name = "HbA1c (%)") +
   scale_y_kodom_periodic() +
   coord_kodom_periodic() +
@@ -592,7 +598,7 @@ population strata.
 ```{r periodic-sort-mean, fig.height = 7}
 ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 12, sort_by = "mean") +
-  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_x_kodom_periodic(period = 12, breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
   scale_y_kodom_periodic() +
   coord_kodom_periodic() +
@@ -618,7 +624,7 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
     n_max          = 10,
     lane_width     = 3
   ) +
-  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_x_kodom_periodic(period = 12, breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
   scale_y_kodom_periodic() +
   coord_kodom_periodic() +
@@ -637,7 +643,7 @@ ggplot(df_small, aes(x = visit_month, id = subject_id, colour = hba1c)) +
     show_points    = FALSE,
     inner_fraction = 0.5
   ) +
-  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_x_kodom_periodic(period = 12, breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
   scale_y_kodom_periodic() +
   coord_kodom_periodic(clockwise = FALSE) +
@@ -661,7 +667,7 @@ ggplot(df_large, aes(x = visit_month, id = subject_id, colour = hba1c)) +
     linewidth       = 0.3,
     spiral_fraction = 0.08
   ) +
-  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_x_kodom_periodic(period = 12, breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(
     discretize   = TRUE,
     color_breaks = c(5.7, 6.5, 8),
@@ -711,7 +717,7 @@ p_peri <- ggplot(
     period = 12, sort_by = "mean",
     show_points = FALSE, spiral_fraction = 0.2
   ) +
-  scale_x_continuous(breaks = 0:11, labels = month.abb) +
+  scale_x_kodom_periodic(period = 12, breaks = 0:11, labels = month.abb) +
   scale_colour_kodom(name = "HbA1c (%)") +
   scale_y_kodom_periodic() +
   coord_kodom_periodic() +

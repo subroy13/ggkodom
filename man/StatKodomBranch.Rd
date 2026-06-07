@@ -13,9 +13,20 @@ StatKodomBranch
 \description{
 Assigns integer base lanes (one per subject) then stacks prediction arms as
 fractional sub-lanes above the observed path within each subject's lane.
+}
+\details{
 Rows where \code{medication} is \code{NA} are the observed path; rows with a non-NA
-\code{medication} value are prediction arms and receive a proportional vertical
-offset. The stat also sets \code{linetype = "solid"} for observed rows and
-\code{linetype = "dashed"} for predicted rows.
+\code{medication} value are prediction arms. The stat replaces \code{NA} in
+\code{data$medication} with \code{"observed"} so that the linetype scale can be
+driven directly from the medication column:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{scale_linetype_manual(
+  values = c("observed" = "solid", "DrugA" = "dashed", "DrugB" = "dotted")
+)
+}\if{html}{\out{</div>}}
+
+Two internal columns — \code{kodom_lane} (integer lane rank) and \code{kodom_track}
+(cleaned medication value) — are passed through to \code{draw_panel} so that
+fork connectors can be placed at each subject's branch point.
 }
 \keyword{internal}

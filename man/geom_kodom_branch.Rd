@@ -15,6 +15,7 @@ geom_kodom_branch(
   lane_width = 1,
   branch_fraction = 0.7,
   show_points = TRUE,
+  show_fork = TRUE,
   na.rm = FALSE,
   show.legend = NA,
   inherit.aes = TRUE
@@ -38,15 +39,17 @@ geom_kodom_branch(
 when exceeded. Default \code{Inf} (all subjects).}
 
 \item{lane_width}{Positive numeric. Vertical distance between adjacent
-subject lanes. Default \code{1}. Increase to spread lanes further apart.}
+subject lanes. Default \code{1}.}
 
-\item{branch_fraction}{Fraction of \code{lane_width} devoted to the prediction
+\item{branch_fraction}{Fraction of \code{lane_width} devoted to prediction
 sub-lanes. Default \code{0.7}. With K arms the sub-lane step is
-\code{branch_fraction / K}; the remaining \code{1 - branch_fraction} fraction
-provides spacing before the next subject.}
+\code{branch_fraction / K}.}
 
 \item{show_points}{If \code{TRUE} (default), draws a point at every observation.
 Set to \code{FALSE}, or map \code{shape = NA} / \code{size = 0}, to suppress points.}
+
+\item{show_fork}{Logical. If \code{TRUE} (default), draws a vertical fork
+connector at each subject's branch point.}
 
 \item{na.rm}{If \code{TRUE}, silently remove rows with missing required aesthetics.}
 
@@ -59,25 +62,38 @@ A ggplot2 layer object.
 }
 \description{
 Draws one horizontal path per subject for the observed trajectory, then fans
-out into dashed sub-lanes — one per medication or intervention arm — for
-predicted (counterfactual) trajectories. The branching time may differ across
-subjects; supply \code{NA} in \code{medication} for all pre-branch and post-branch
-observed rows and a non-NA arm label for every predicted row.
+out into sub-lanes — one per medication or intervention arm — for predicted
+(counterfactual) trajectories. The branching time may differ across subjects.
 }
 \details{
-\strong{Lane layout.} Each subject occupies a primary horizontal band of width
-\code{lane_width}. Within that band the observed path is drawn at the base; each
-prediction arm is placed at an equal sub-lane fraction above it controlled by
-\code{branch_fraction}. With two arms and \code{branch_fraction = 0.7}, arm 1 sits at
-\code{0.35 * lane_width} above the base and arm 2 at \code{0.70 * lane_width} above
-the base, leaving a 30\% gap before the next subject's lane.
+\strong{Data format.} Supply \code{NA} in the \code{medication} column for all observed rows
+(pre- and post-branch). Supply a non-NA arm label (e.g. \code{"DrugA"}) for every
+predicted row. The stat replaces \code{NA} with \code{"observed"} in its output so
+that the linetype scale receives a clean string for every row.
 
-\strong{Linetype.} The stat automatically sets \code{linetype = "solid"} for observed
-rows and \code{linetype = "dashed"} for predicted rows. Map \code{colour} to the
-outcome of interest; use \code{medication} to distinguish arms.
+\strong{Linetype.} Map \verb{linetype = <arm_column>} in \code{aes()} \strong{and} supply a
+\code{scale_linetype_manual()} so that the legend appears and the linetypes are
+exactly what you want. The stat converts \code{NA} (observed rows) to the string
+\code{"observed"} before the scale is applied, so target that key explicitly:
 
-\strong{Y-axis labels.} Because \code{y} values are real-valued positions rather than
-subject IDs, suppress the default numeric axis or set custom breaks:
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{aes(linetype = arm, medication = arm)   # both point to the same column
+scale_linetype_manual(
+  values = c("observed" = "solid", "DrugA" = "dashed", "DrugB" = "dotted")
+)
+}\if{html}{\out{</div>}}
+
+\strong{Fork connector.} A short vertical segment is drawn at each subject's
+branch point (the first x that appears in a predicted arm), connecting the
+observed lane to the topmost arm. Suppress with \code{show_fork = FALSE}.
+
+\strong{Lane layout.} Each subject occupies a primary band of width \code{lane_width}.
+Within that band the observed path is at the base; each prediction arm sits
+at an equal sub-lane fraction above it controlled by \code{branch_fraction}. With
+two arms and \code{branch_fraction = 0.7}, arm 1 is at \code{0.35 * lane_width} above
+the base and arm 2 is at \code{0.70 * lane_width}, leaving 30\% clearance before
+the next subject.
+
+\strong{Y-axis labels.} Subject IDs can be added by setting custom breaks:
 
 \if{html}{\out{<div class="sourceCode r">}}\preformatted{scale_y_continuous(
   breaks = seq_len(n_subjects) * lane_width,
@@ -92,17 +108,22 @@ subject IDs, suppress the default numeric axis or set custom breaks:
 \item \strong{\code{id}} — subject identifier; determines the primary lane position
 \item \strong{\code{colour}} — measured value mapped to colour (interpolated along path)
 \item \code{medication} — \code{NA} for observed rows; a character/factor arm label for
-predicted rows. Each unique non-NA value becomes one dashed sub-lane.
+predicted rows. Each unique non-NA value becomes one sub-lane.
 \item \code{size}, \code{linewidth}, \code{alpha}, \code{shape}, \code{stroke} — standard path/point
-aesthetics. \code{linetype} is set automatically by the stat (solid/dashed).
+aesthetics. \code{linetype} is set by the stat (medication name / \code{"observed"}).
 }
 }
 
 \examples{
 \dontrun{
-ggplot(df, aes(x = time, id = subject_id,
-               colour = hba1c, medication = arm)) +
+ggplot(df, aes(
+  x = time, id = subject_id,
+  colour = hba1c, linetype = arm, medication = arm
+)) +
   geom_kodom_branch(sort_by = "mean", lane_width = 2) +
+  scale_linetype_manual(
+    values = c("observed" = "solid", "DrugA" = "dashed", "DrugB" = "dotted")
+  ) +
   scale_colour_kodom() +
   theme_kodom()
 }
