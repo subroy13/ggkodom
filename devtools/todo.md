@@ -11,20 +11,6 @@
 - [x] Regenerate package documentation (run devtools::document()) to sync show_fork and other code changes with .Rd files.
 - [x] Resolve NOTE about grid package imported but not used in NAMESPACE (e.g., add importFrom or clean description).
 
-## CRAN Submission Checklist (Short)
-
-- [x] **Description File**: Title is Title Case, Description is a proper paragraph ending in a period, single quotes for package names, no "This package...".
-- [x] **Authors**: `Authors@R` correctly formatted with at least one `[cre, aut]`.
-- [ ] **License**: Standard license (e.g., `MIT + file LICENSE`).
-- [ ] **Local Checks**: Run `devtools::spell_check()`, `devtools::check(remote = TRUE, manual = TRUE)`, and rebuild `README.md`.
-- [ ] **Cross-OS Remote Checks**:
-  - Windows: `devtools::check_win_devel()`
-  - macOS: `devtools::check_mac_release()`
-  - Linux/Others: `rhub::check_for_cran()`
-- [ ] **Documentation**: Update `NEWS.md` for the release.
-- [ ] **CRAN Comments**: Create `cran-comments.md` outlining the test environments and 0 errors/warnings/notes results.
-- [ ] **Submission**: Run `devtools::submit_cran()` and confirm the email link.
-
 
 # CRAN Submission Checklist (Detailed)
 
@@ -68,8 +54,8 @@ CRAN will test your package on Windows, macOS, and Linux (Debian/Fedora). You mu
   ```
 
 ## 5. Submission
-- [ ] Once all remote checks come back green, build the tarball.
-- [ ] Run `devtools::submit_cran()`.
-- [ ] **IMPORTANT**: You will receive an email asking you to confirm your submission. Click the link in the email to finalize it!
+- [x] Once all remote checks come back green, build the tarball.
+- [x] Run `devtools::submit_cran()`.
+- [x] **IMPORTANT**: You will receive an email asking you to confirm your submission. Click the link in the email to finalize it!
 
 
