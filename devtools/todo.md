@@ -47,13 +47,13 @@ Even though `devtools::check(cran = TRUE)` passes with 0 errors, warnings, and n
 
 ## 3. Remote Checks (CRAN environments)
 CRAN will test your package on Windows, macOS, and Linux (Debian/Fedora). You must verify it works on all of them.
-- [ ] **Windows**: Run `devtools::check_win_devel()`. This sends an email with the build results on Windows. (You can also run `check_win_release()`).
-- [ ] **macOS**: Run `devtools::check_mac_release()`.
-- [ ] **R-hub (Linux & Others)**: Run `rhub::check_for_cran()`. This runs the package against multiple CRAN-like platforms.
+- [x] **Windows**: Run `devtools::check_win_devel()`. This sends an email with the build results on Windows. (You can also run `check_win_release()`).
+- [x] **macOS**: Run `devtools::check_mac_release()`.
+- [x] **R-hub (Linux & Others)**: Run `rhub::check_for_cran()`. This runs the package against multiple CRAN-like platforms.
 
 ## 4. Prepare Documentation
-- [ ] **NEWS.md**: Add a section for the new version (e.g., `# ggkodom 0.1.0 \n * Initial CRAN release.`).
-- [ ] **cran-comments.md**: Create a `cran-comments.md` file in the root directory. This is sent to the CRAN volunteers. Use this template:
+- [x] **NEWS.md**: Add a section for the new version (e.g., `# ggkodom 0.1.0 \n * Initial CRAN release.`).
+- [x] **cran-comments.md**: Create a `cran-comments.md` file in the root directory. This is sent to the CRAN volunteers. Use this template:
   ```markdown
   ## Test environments
   * local macOS install, R 4.3.0

@@ -1,6 +1,6 @@
 Package: ggkodom
 Title: Visualize Individual Longitudinal Trajectories
-Version: 0.1.0
+Version: 1.0.0
 Authors@R: c(
     person("Ayoushman", "Bhattacharya", role = "aut"),
     person("Sayan", "Das", role = "aut"),
