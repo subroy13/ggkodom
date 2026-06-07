@@ -1,3 +1,7 @@
-# ggkodom 0.1.0 
+# ggkodom 1.0.1
 
-* Initial CRAN release.
+* CRAN resubmission: Configured spellcheck `WORDLIST` and added logo to package documentation.
+
+# ggkodom 1.0.0 
+
+* Initial CRAN submission.
