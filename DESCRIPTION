@@ -1,18 +1,18 @@
 Package: ggkodom
 Title: Visualize Individual Longitudinal Trajectories
-Version: 1.0.1
+Version: 1.0.2
 Authors@R: c(
     person("Ayoushman", "Bhattacharya", role = "aut"),
     person("Sayan", "Das", role = "aut"),
     person("Subrata", "Pal", role = "aut"),
     person("Subhrajyoty", "Roy", , "subhrajyotyroy@gmail.com", role = c("aut", "cre"))
   )
-Description: A ggplot2-based toolkit for visualizing individual-level
+Description: A 'ggplot2'-based toolkit for visualizing individual-level
     longitudinal trajectories. Creates linear 'kodom' plots, circular 'kodom'
     plots, heatmaps, and state-ribbon charts for repeated-measures data.
     Each subject gets its own visual lane with measurements colored by
     value, revealing patterns across subjects and time. The circular
-    variant resembles the Kodom flower (Neolamarckia cadamba).
+    variant resembles the 'Kodom' flower ('Neolamarckia cadamba').
 License: MIT + file LICENSE
 Encoding: UTF-8
 Language: en-US
