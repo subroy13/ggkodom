@@ -12,7 +12,7 @@ Description: A ggplot2-based toolkit for visualizing individual-level
     plots, heatmaps, and state-ribbon charts for repeated-measures data.
     Each subject gets its own visual lane with measurements colored by
     value, revealing patterns across subjects and time. The circular
-    variant resembles the Kadam flower (Neolamarckia cadamba).
+    variant resembles the Kodom flower (Neolamarckia cadamba).
 License: MIT + file LICENSE
 Encoding: UTF-8
 Language: en-US
@@ -30,6 +30,7 @@ Suggests:
     fdapace,
     patchwork,
     knitr,
-    rmarkdown
+    rmarkdown,
+    spelling
 VignetteBuilder: knitr
 Config/testthat/edition: 3
