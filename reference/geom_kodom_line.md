@@ -111,10 +111,20 @@ intentionally independent: each controls a different graphical element.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
+library(ggplot2)
+df <- data.frame(
+  subject_id = rep(1:5, each = 4),
+  time = rep(1:4, 5),
+  visit_month = rep(1:4, 5),
+  value = rep(1:4, 5),
+  hba1c = rep(1:4, 5),
+  arm = rep(c("Treatment", "Control"), c(12, 8))
+)
 ggplot(df, aes(x = time, id = subject_id, colour = hba1c)) +
   geom_kodom_line(sort_by = "mean", n_max = 50) +
   scale_colour_kodom() +
   theme_kodom()
-} # }
+
+# }
 ```

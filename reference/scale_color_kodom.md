@@ -65,14 +65,25 @@ a continuous gradient washes out into a single hue.
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
+library(ggplot2)
+df <- data.frame(
+  subject_id = rep(1:5, each = 4),
+  time = rep(1:4, 5),
+  visit_month = rep(1:4, 5),
+  value = rep(1:4, 5),
+  hba1c = rep(1:4, 5),
+  arm = rep(c("Treatment", "Control"), c(12, 8))
+)
 ggplot(df, aes(x = time, id = subject_id, color = value)) +
   geom_kodom_line() +
   scale_color_kodom()
+
 
 # Discrete bands at clinical thresholds
 ggplot(df, aes(x = time, id = subject_id, color = hba1c)) +
   geom_kodom_line() +
   scale_color_kodom(discretize = TRUE, color_breaks = c(5.7, 6.5))
-} # }
+
+# }
 ```

@@ -38,7 +38,16 @@ It should be added to every plot that uses
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
+library(ggplot2)
+df <- data.frame(
+  subject_id = rep(1:5, each = 4),
+  time = rep(1:4, 5),
+  visit_month = rep(1:4, 5),
+  value = rep(1:4, 5),
+  hba1c = rep(1:4, 5),
+  arm = rep(c("Treatment", "Control"), c(12, 8))
+)
 ggplot(df, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 12, inner_fraction = 0.3) +
   scale_x_continuous(breaks = 0:11, labels = month.abb) +
@@ -46,5 +55,6 @@ ggplot(df, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   scale_colour_kodom() +
   coord_kodom_periodic() +
   theme_kodom_periodic()
-} # }
+
+# }
 ```

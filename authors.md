@@ -13,11 +13,11 @@
 ## Citation
 
 Bhattacharya A, Das S, Pal S, Roy S (2026). *ggkodom: Visualize
-Individual Longitudinal Trajectories*. R package version 1.0.2.
+Individual Longitudinal Trajectories*. R package version 1.0.3.
 
     @Manual{,
       title = {ggkodom: Visualize Individual Longitudinal Trajectories},
       author = {Ayoushman Bhattacharya and Sayan Das and Subrata Pal and Subhrajyoty Roy},
       year = {2026},
-      note = {R package version 1.0.2},
+      note = {R package version 1.0.3},
     }

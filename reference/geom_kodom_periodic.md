@@ -106,6 +106,10 @@ geom_kodom_periodic(
 
   If `FALSE`, overrides the default aesthetics.
 
+## Value
+
+A ggplot2 layer object.
+
 ## Details
 
 **Coordinate system.** This geom is designed for use with

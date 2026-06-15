@@ -153,7 +153,16 @@ at `0.35 * lane_width` above the base and arm 2 is at
 ## Examples
 
 ``` r
-if (FALSE) { # \dontrun{
+# \donttest{
+library(ggplot2)
+df <- data.frame(
+  subject_id = rep(1:5, each = 4),
+  time = rep(1:4, 5),
+  visit_month = rep(1:4, 5),
+  value = rep(1:4, 5),
+  hba1c = rep(1:4, 5),
+  arm = rep(c("Treatment", "Control"), c(12, 8))
+)
 ggplot(df, aes(
   x = time, id = subject_id,
   colour = hba1c, linetype = arm, medication = arm
@@ -164,5 +173,12 @@ ggplot(df, aes(
   ) +
   scale_colour_kodom() +
   theme_kodom()
-} # }
+#> Warning: No shared levels found between `names(values)` of the manual scale and the
+#> data's linetype values.
+#> Warning: No shared levels found between `names(values)` of the manual scale and the
+#> data's linetype values.
+#> Warning: Removed 20 rows containing missing values or values outside the scale range
+#> (`geom_kodom_branch()`).
+
+# }
 ```
