@@ -20,7 +20,16 @@ angle), \code{start = pi/2} (x = 0 at 12 o'clock), and \code{direction = -1}
 (clockwise). Pass \code{clockwise = FALSE} for a counter-clockwise layout.
 }
 \examples{
-\dontrun{
+\donttest{
+library(ggplot2)
+df <- data.frame(
+  subject_id = rep(1:5, each = 4),
+  time = rep(1:4, 5),
+  visit_month = rep(1:4, 5),
+  value = rep(1:4, 5),
+  hba1c = rep(1:4, 5),
+  arm = rep(c("Treatment", "Control"), c(12, 8))
+)
 ggplot(df, aes(x = visit_month, id = subject_id, colour = hba1c)) +
   geom_kodom_periodic(period = 12) +
   scale_x_continuous(breaks = 1:12, labels = month.abb, limits = c(0, 12)) +

@@ -34,7 +34,16 @@ Identical behavior to \code{\link[=scale_color_kodom]{scale_color_kodom()}} but 
 aesthetic. Intended for use with \code{\link[=geom_kodom_heatmap]{geom_kodom_heatmap()}}.
 }
 \examples{
-\dontrun{
+\donttest{
+library(ggplot2)
+df <- data.frame(
+  subject_id = rep(1:5, each = 4),
+  time = rep(1:4, 5),
+  visit_month = rep(1:4, 5),
+  value = rep(1:4, 5),
+  hba1c = rep(1:4, 5),
+  arm = rep(c("Treatment", "Control"), c(12, 8))
+)
 ggplot(df, aes(x = time, id = subject_id, fill = value)) +
   geom_kodom_heatmap() +
   scale_fill_kodom()

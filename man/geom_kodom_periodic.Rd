@@ -67,6 +67,9 @@ Set to \code{FALSE}, or map \code{shape = NA} / \code{size = 0}, to suppress poi
 
 \item{inherit.aes}{If \code{FALSE}, overrides the default aesthetics.}
 }
+\value{
+A ggplot2 layer object.
+}
 \description{
 Draws concentric arcs representing cyclical longitudinal data. Time maps to
 angle (one full revolution equals one \code{period}), and each subject's base

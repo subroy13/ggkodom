@@ -25,7 +25,16 @@ appear as horizontal rules, not concentric circles — so both major axes
 are suppressed here.
 }
 \examples{
-\dontrun{
+\donttest{
+library(ggplot2)
+df <- data.frame(
+  subject_id = rep(1:5, each = 4),
+  time = rep(1:4, 5),
+  visit_month = rep(1:4, 5),
+  value = rep(1:4, 5),
+  hba1c = rep(1:4, 5),
+  arm = rep(c("Treatment", "Control"), c(12, 8))
+)
 ggplot(df, aes(x = time, id = subject_id, colour = value)) +
   geom_kodom_circular() +
   scale_colour_kodom() +

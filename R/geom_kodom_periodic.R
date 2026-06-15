@@ -134,6 +134,7 @@ GeomKodomPeriodic <- ggplot2::ggproto("GeomKodomPeriodic", ggplot2::GeomPath,
 #'   legible — particularly useful when using `n_max` to show a small subset.
 #'   The hollow center (`inner_fraction`) is intentionally not scaled so the
 #'   hole size stays proportional to the cohort, not the spacing.
+#' @return A ggplot2 layer object.
 #' @export
 geom_kodom_periodic <- function(mapping = NULL, data = NULL,
                                 stat = StatKodomPeriodic, position = "identity",

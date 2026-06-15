@@ -156,28 +156,32 @@ GeomKodomBranch <- ggplot2::ggproto(
           obs_before <- obs_rows[obs_rows$x < fork_x, ]
           if (nrow(obs_before) == 0L) obs_before <- obs_rows
           fork_x_start <- max(obs_before$x)
-          obs_ref      <- obs_before[which.max(obs_before$x), ]
+          obs_ref <- obs_before[which.max(obs_before$x), ]
 
           # All prediction arms present at fork_x, one row each.
           arms_at_fork <- prd_rows[prd_rows$x == fork_x, ]
-          if (nrow(arms_at_fork) == 0L) return(NULL)
+          if (nrow(arms_at_fork) == 0L) {
+            return(NULL)
+          }
 
           # One diagonal spoke per arm: (fork_x_start, obs_y) → (fork_x, arm_y).
           # This fans the connector out to every arm so none hangs unconnected.
           do.call(rbind, lapply(seq_len(nrow(arms_at_fork)), function(i) {
             arm_y <- arms_at_fork$y[i]
-            if (is.na(arm_y) || abs(arm_y - obs_ref$y) < 1e-9) return(NULL)
+            if (is.na(arm_y) || abs(arm_y - obs_ref$y) < 1e-9) {
+              return(NULL)
+            }
             data.frame(
-              x         = fork_x_start,
-              xend      = fork_x,
-              y         = obs_ref$y,
-              yend      = arm_y,
-              colour    = obs_ref$colour,
-              alpha     = if (is.na(obs_ref$alpha)) 1 else obs_ref$alpha,
+              x = fork_x_start,
+              xend = fork_x,
+              y = obs_ref$y,
+              yend = arm_y,
+              colour = obs_ref$colour,
+              alpha = if (is.na(obs_ref$alpha)) 1 else obs_ref$alpha,
               linewidth = obs_ref$linewidth,
-              linetype  = "solid",
-              PANEL     = ld$PANEL[1L],
-              group     = -(lane * 100L + i),
+              linetype = "solid",
+              PANEL = ld$PANEL[1L],
+              group = -(lane * 100L + i),
               stringsAsFactors = FALSE
             )
           }))
@@ -271,7 +275,16 @@ GeomKodomBranch <- ggplot2::ggproto(
 #' @return A ggplot2 layer object.
 #' @export
 #' @examples
-#' \dontrun{
+#' \donttest{
+#' library(ggplot2)
+#' df <- data.frame(
+#'   subject_id = rep(1:5, each = 4),
+#'   time = rep(1:4, 5),
+#'   visit_month = rep(1:4, 5),
+#'   value = rep(1:4, 5),
+#'   hba1c = rep(1:4, 5),
+#'   arm = rep(c("Treatment", "Control"), c(12, 8))
+#' )
 #' ggplot(df, aes(
 #'   x = time, id = subject_id,
 #'   colour = hba1c, linetype = arm, medication = arm

@@ -20,7 +20,16 @@
 #' @return A [ggplot2::theme()] object.
 #' @export
 #' @examples
-#' \dontrun{
+#' \donttest{
+#' library(ggplot2)
+#' df <- data.frame(
+#'   subject_id = rep(1:5, each = 4),
+#'   time = rep(1:4, 5),
+#'   visit_month = rep(1:4, 5),
+#'   value = rep(1:4, 5),
+#'   hba1c = rep(1:4, 5),
+#'   arm = rep(c("Treatment", "Control"), c(12, 8))
+#' )
 #' ggplot(df, aes(x = time, id = subject_id, colour = value)) +
 #'   geom_kodom_line() +
 #'   scale_colour_kodom() +
@@ -60,7 +69,16 @@ theme_kodom <- function(base_size = 12, legend_position = "top") {
 #' @return A [ggplot2::theme()] object.
 #' @export
 #' @examples
-#' \dontrun{
+#' \donttest{
+#' library(ggplot2)
+#' df <- data.frame(
+#'   subject_id = rep(1:5, each = 4),
+#'   time = rep(1:4, 5),
+#'   visit_month = rep(1:4, 5),
+#'   value = rep(1:4, 5),
+#'   hba1c = rep(1:4, 5),
+#'   arm = rep(c("Treatment", "Control"), c(12, 8))
+#' )
 #' ggplot(df, aes(x = time, id = subject_id, colour = value)) +
 #'   geom_kodom_circular() +
 #'   scale_colour_kodom() +
@@ -92,7 +110,16 @@ theme_kodom_circular <- function(base_size = 12) {
 #' @return A [ggplot2::theme()] object.
 #' @export
 #' @examples
-#' \dontrun{
+#' \donttest{
+#' library(ggplot2)
+#' df <- data.frame(
+#'   subject_id = rep(1:5, each = 4),
+#'   time = rep(1:4, 5),
+#'   visit_month = rep(1:4, 5),
+#'   value = rep(1:4, 5),
+#'   hba1c = rep(1:4, 5),
+#'   arm = rep(c("Treatment", "Control"), c(12, 8))
+#' )
 #' ggplot(df, aes(x = visit_month, id = subject_id, colour = hba1c)) +
 #'   geom_kodom_periodic(period = 12) +
 #'   scale_x_continuous(breaks = 1:12, labels = month.abb, limits = c(0, 12)) +
@@ -126,7 +153,16 @@ theme_kodom_periodic <- function(base_size = 12) {
 #' @return A [ggplot2::coord_polar()] coordinate object.
 #' @export
 #' @examples
-#' \dontrun{
+#' \donttest{
+#' library(ggplot2)
+#' df <- data.frame(
+#'   subject_id = rep(1:5, each = 4),
+#'   time = rep(1:4, 5),
+#'   visit_month = rep(1:4, 5),
+#'   value = rep(1:4, 5),
+#'   hba1c = rep(1:4, 5),
+#'   arm = rep(c("Treatment", "Control"), c(12, 8))
+#' )
 #' ggplot(df, aes(x = visit_month, id = subject_id, colour = hba1c)) +
 #'   geom_kodom_periodic(period = 12) +
 #'   scale_x_continuous(breaks = 1:12, labels = month.abb, limits = c(0, 12)) +
@@ -159,7 +195,16 @@ coord_kodom_periodic <- function(clockwise = TRUE) {
 #' @return A [ggplot2::scale_y_continuous()] object.
 #' @export
 #' @examples
-#' \dontrun{
+#' \donttest{
+#' library(ggplot2)
+#' df <- data.frame(
+#'   subject_id = rep(1:5, each = 4),
+#'   time = rep(1:4, 5),
+#'   visit_month = rep(1:4, 5),
+#'   value = rep(1:4, 5),
+#'   hba1c = rep(1:4, 5),
+#'   arm = rep(c("Treatment", "Control"), c(12, 8))
+#' )
 #' ggplot(df, aes(x = visit_month, id = subject_id, colour = hba1c)) +
 #'   geom_kodom_periodic(period = 12, inner_fraction = 0.3) +
 #'   scale_x_continuous(breaks = 0:11, labels = month.abb) +
@@ -196,7 +241,16 @@ scale_y_kodom_periodic <- function(
 #' @return A [ggplot2::scale_x_continuous()] object.
 #' @export
 #' @examples
-#' \dontrun{
+#' \donttest{
+#' library(ggplot2)
+#' df <- data.frame(
+#'   subject_id = rep(1:5, each = 4),
+#'   time = rep(1:4, 5),
+#'   visit_month = rep(1:4, 5),
+#'   value = rep(1:4, 5),
+#'   hba1c = rep(1:4, 5),
+#'   arm = rep(c("Treatment", "Control"), c(12, 8))
+#' )
 #' ggplot(df, aes(x = visit_month, id = subject_id, colour = hba1c)) +
 #'   geom_kodom_periodic(period = 12) +
 #'   scale_x_kodom_periodic(period = 12, labels = month.abb) +

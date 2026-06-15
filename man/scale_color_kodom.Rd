@@ -49,7 +49,16 @@ bands separated at \code{color_breaks} — useful when values change slowly and
 a continuous gradient washes out into a single hue.
 }
 \examples{
-\dontrun{
+\donttest{
+library(ggplot2)
+df <- data.frame(
+  subject_id = rep(1:5, each = 4),
+  time = rep(1:4, 5),
+  visit_month = rep(1:4, 5),
+  value = rep(1:4, 5),
+  hba1c = rep(1:4, 5),
+  arm = rep(c("Treatment", "Control"), c(12, 8))
+)
 ggplot(df, aes(x = time, id = subject_id, color = value)) +
   geom_kodom_line() +
   scale_color_kodom()
